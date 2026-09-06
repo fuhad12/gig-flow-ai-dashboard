@@ -1,0 +1,55 @@
+import { Dashboard } from "@/components/dashboard"
+import { MarketingLanding } from "@/components/marketing-landing"
+import { SetupRequired } from "@/components/setup-required"
+import { createSupabaseServer } from "@/lib/supabase/server"
+import { getQuotaStatus } from "@/lib/quota"
+
+export const dynamic = "force-dynamic"
+
+export default async function Home() {
+  const supabase = await createSupabaseServer()
+  if (!supabase) {
+    return <SetupRequired />
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  // Unauthenticated visitors get the marketing site. Sign-in CTAs there
+  // route to /auth which redirects back to `/` on success, lifting them
+  // straight into the dashboard.
+  if (!user) {
+    return <MarketingLanding />
+  }
+
+  const quota = await getQuotaStatus(user.id)
+
+  // First-run onboarding gate.
+  //
+  // A user "needs onboarding" when they've never saved or dismissed the
+  // niche-selection step. We detect that with `onboardedAt === null`,
+  // not "selectedNiches is empty" — that way a user who intentionally
+  // clears their niches later doesn't get force-routed back to Settings.
+  // The dashboard uses this flag to default the initial view to Settings
+  // and show a welcome banner above the niches card.
+  const needsNicheOnboarding =
+    quota.onboardedAt === null && quota.selectedNiches.length === 0
+
+  return (
+    <Dashboard
+      user={{ id: user.id, email: user.email ?? "" }}
+      isPremium={quota.isPremium}
+      tier={quota.tier}
+      subscriptionPlan={quota.subscriptionPlan}
+      subscriptionStatus={quota.subscriptionStatus}
+      currentPeriodEnd={quota.currentPeriodEnd}
+      initialCreditsUsed={quota.used}
+      creditLimit={quota.limit}
+      initialTopupBalance={quota.topupBalance}
+      selectedNiches={quota.selectedNiches}
+      skillTags={quota.skillTags}
+      needsNicheOnboarding={needsNicheOnboarding}
+    />
+  )
+}
