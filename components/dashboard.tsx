@@ -26,14 +26,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import {
-  HelpCircle,
-  Mail,
-  MessageSquare,
-  FileText,
-  Menu,
-  BarChart3,
-} from "lucide-react"
+import { HelpCircle, Mail, Menu, BarChart3 } from "lucide-react"
 
 import type { AnalyzeResponse } from "@/lib/analysis-types"
 
@@ -94,12 +87,11 @@ interface DashboardProps {
   needsNicheOnboarding: boolean
 }
 
+const SUPPORT_EMAIL =
+  process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || "support@jobflow.win"
+
 function HelpView() {
-  const helpItems = [
-    { icon: FileText, title: "Documentation", description: "Learn how to get the most out of JobFlow AI" },
-    { icon: MessageSquare, title: "Community", description: "Join our Discord community of 2,000+ sellers" },
-    { icon: Mail, title: "Contact Support", description: "Get help from our team within 24 hours" },
-  ]
+  const mailto = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("JobFlow support")}`
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-4 sm:p-6">
@@ -109,22 +101,33 @@ function HelpView() {
           Help & Support
         </h1>
         <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-          Help with Fiverr ranking audits and Upwork proposals
+          Billing, credits, scraping, or how a tool works — email us and we&apos;ll
+          reply within 24 hours.
         </p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {helpItems.map((item) => (
-          <Card key={item.title} className="border-border bg-card hover:border-emerald/50 transition-colors cursor-pointer">
-            <CardHeader>
-              <div className="flex size-10 items-center justify-center rounded-lg bg-emerald/10 mb-2">
-                <item.icon className="size-5 text-emerald" />
-              </div>
-              <CardTitle className="text-foreground">{item.title}</CardTitle>
-              <CardDescription>{item.description}</CardDescription>
-            </CardHeader>
-          </Card>
-        ))}
-      </div>
+      <Card className="max-w-lg border-border bg-card">
+        <CardHeader className="gap-4">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-emerald/10">
+            <Mail className="size-5 text-emerald" />
+          </div>
+          <div>
+            <CardTitle className="text-foreground">Contact support</CardTitle>
+            <CardDescription className="mt-1.5">
+              Write to{" "}
+              <a
+                href={mailto}
+                className="font-medium text-emerald underline-offset-2 hover:underline"
+              >
+                {SUPPORT_EMAIL}
+              </a>
+              . Include your account email and a short description of the issue.
+            </CardDescription>
+          </div>
+          <Button asChild className="w-fit bg-emerald text-white hover:bg-emerald/90">
+            <a href={mailto}>Email support</a>
+          </Button>
+        </CardHeader>
+      </Card>
     </div>
   )
 }
