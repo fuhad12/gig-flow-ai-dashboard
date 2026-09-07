@@ -7,7 +7,8 @@
  *
  *   1. Pick a provider (Resend, Postmark, SES, etc).
  *   2. Replace the `sendNotificationEmail` body with a real call.
- *   3. Read `NOTIFY_EMAIL_FROM` and provider-specific env vars.
+ *   3. Read `RESEND_API_KEY`, `NOTIFY_EMAIL_FROM` (or `RESEND_FROM_EMAIL` /
+ *      `RESEND_FROM_NAME`), and optional `RESEND_REPLY_TO`.
  *   4. Optionally honor a user preference (see `getEmailPreference` below).
  *
  * The shape of `NotificationEmailEvent` is stable, so swapping the

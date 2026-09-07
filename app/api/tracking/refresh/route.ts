@@ -5,7 +5,8 @@
  * - **User-initiated** (POST, no auth header): refreshes the signed-in
  *   user's gigs. Ignores the staleness window.
  * - **Cron-initiated** (GET or POST + `Authorization: Bearer <CRON_SECRET>`):
- *   refreshes ALL users' tracked gigs that are older than 6h.
+ *   refreshes ALL users' tracked gigs that are older than the staleness
+ *   window (default 6h). Schedule in `vercel.json` is once daily on Hobby.
  *
  * Vercel Cron Jobs always hit your function with `GET` — so we expose both
  * GET (cron only) and POST (cron OR user). `vercel.json` ships in the repo

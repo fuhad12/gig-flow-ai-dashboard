@@ -60,15 +60,45 @@ install.
 
 In the Supabase dashboard:
 
-- **Authentication → Providers** → enable **Email**.
+- **Authentication → Providers** → enable **Email** (keep **Confirm email** on for production).
 - **Authentication → URL Configuration**:
   - **Site URL**: `https://jobflow.win` (or `http://localhost:3000` in dev).
-  - **Redirect URLs** add: `https://jobflow.win/auth/callback`
-    and `https://jobflow.win/auth/update-password`.
-    (Also keep localhost equivalents for local testing.)- **Authentication → Email Templates → Confirm signup**: edit so the
-  confirmation link points to `{{ .SiteURL }}/auth/callback?code={{ .Token }}`.
+  - **Redirect URLs** add:
+    - `https://jobflow.win/auth/callback`
+    - `https://jobflow.win/auth/update-password`
+    - (Also keep localhost equivalents for local testing.)
+- **Authentication → Email Templates → Confirm signup**: brand as JobFlow.
+  Supabase’s default confirmation link (`{{ .ConfirmationURL }}`) is fine —
+  it redirects through `/auth/callback` after exchange.
 
-### 2.4 Grab keys
+### 2.4 Send auth email via Resend (required for production)
+
+Keep **Supabase** for Auth + DB. Use **Resend** only as the mail sender so
+confirm / reset emails say **JobFlow**, not Supabase Auth, and aren’t capped
+at ~2 messages/hour.
+
+1. Sign up at [resend.com](https://resend.com) → create an API key.
+2. **Domains** → add `jobflow.win` → add the DNS records Resend shows
+   (SPF / DKIM) → wait until **Verified**.
+3. In Supabase: **Authentication → Emails → SMTP Settings** → enable custom SMTP:
+
+| Field | Value |
+| --- | --- |
+| Sender email | `noreply@jobflow.win` (must be on the verified domain) |
+| Sender name | `JobFlow` |
+| Host | `smtp.resend.com` |
+| Port | `465` |
+| Username | `resend` |
+| Password | your Resend API key |
+
+4. Save, then sign up with a real inbox and confirm the From line is JobFlow.
+
+Optional later: store these in Vercel for app notification emails
+(`lib/email.ts`): `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`,
+`RESEND_REPLY_TO`, `NOTIFY_EMAIL_FROM`. Auth SMTP only needs the API key
+pasted into Supabase.
+
+### 2.5 Grab keys
 
 **Settings → API**:
 
@@ -196,10 +226,11 @@ Vercel Cron Jobs need two things:
 1. **`vercel.json`** (already committed at the repo root):
    ```json
    {
-     "crons": [{ "path": "/api/tracking/refresh", "schedule": "0 */6 * * *" }]
+     "crons": [{ "path": "/api/tracking/refresh", "schedule": "0 6 * * *" }]
    }
    ```
-   This fires a GET to `/api/tracking/refresh` every 6 hours.
+   This fires a GET to `/api/tracking/refresh` once daily at 06:00 UTC
+   (Hobby-compatible; denser schedules need Vercel Pro).
 2. **`CRON_SECRET`** env var. Generate one and paste into Vercel:
    ```bash
    openssl rand -base64 32
@@ -241,8 +272,8 @@ Hit **Deploy**. After it goes live:
 3. Paste a Fiverr URL into the Analyzer → confirm you see a real analysis.
 4. Upgrade with Stripe test card `4242 4242 4242 4242` → confirm the
    Settings page shows "JobFlow Pro".
-5. Open the **Tracker** → add a competitor → wait 6h (or curl the cron
-   endpoint manually) and confirm a second snapshot lands.
+5. Open the **Tracker** → add a competitor → wait for the daily cron
+   (or curl the cron endpoint manually) and confirm a second snapshot lands.
 
 ---
 
