@@ -10,6 +10,8 @@ import {
   AlertCircle,
   CheckCircle2,
   ArrowLeft,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -31,6 +33,7 @@ export function AuthView({ initialError, nextPath = "/" }: AuthViewProps) {
   const [mode, setMode] = useState<Mode>("signin")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(initialError ?? null)
   const [info, setInfo] = useState<string | null>(null)
@@ -39,6 +42,11 @@ export function AuthView({ initialError, nextPath = "/" }: AuthViewProps) {
   useEffect(() => {
     if (initialError) setError(initialError)
   }, [initialError])
+
+  // Reset visibility when leaving password fields (forgot mode).
+  useEffect(() => {
+    if (mode === "forgot") setShowPassword(false)
+  }, [mode])
 
   const afterAuthPath =
     nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/"
@@ -240,7 +248,7 @@ export function AuthView({ initialError, nextPath = "/" }: AuthViewProps) {
                   <Lock className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     id="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     autoComplete={
                       mode === "signin" ? "current-password" : "new-password"
                     }
@@ -254,8 +262,21 @@ export function AuthView({ initialError, nextPath = "/" }: AuthViewProps) {
                         ? "At least 6 characters"
                         : "Your password"
                     }
-                    className="h-11 w-full rounded-lg border border-border bg-secondary pl-10 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-emerald focus:ring-1 focus:ring-emerald/40 focus:outline-none disabled:opacity-50 transition-colors"
+                    className="h-11 w-full rounded-lg border border-border bg-secondary pl-10 pr-11 text-sm text-foreground placeholder:text-muted-foreground focus:border-emerald focus:ring-1 focus:ring-emerald/40 focus:outline-none disabled:opacity-50 transition-colors"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    disabled={loading}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="size-4" />
+                    ) : (
+                      <Eye className="size-4" />
+                    )}
+                  </button>
                 </div>
               </div>
             )}

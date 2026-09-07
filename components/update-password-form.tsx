@@ -8,6 +8,8 @@ import {
   Lock,
   AlertCircle,
   CheckCircle2,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -23,6 +25,8 @@ export function UpdatePasswordForm({ email }: UpdatePasswordFormProps) {
 
   const [password, setPassword] = useState("")
   const [confirm, setConfirm] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
@@ -95,7 +99,7 @@ export function UpdatePasswordForm({ email }: UpdatePasswordFormProps) {
                 <Lock className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <input
                   id="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   autoComplete="new-password"
                   required
                   minLength={6}
@@ -103,8 +107,21 @@ export function UpdatePasswordForm({ email }: UpdatePasswordFormProps) {
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
                   placeholder="At least 6 characters"
-                  className="h-11 w-full rounded-lg border border-border bg-secondary pl-10 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-emerald focus:ring-1 focus:ring-emerald/40 focus:outline-none disabled:opacity-50 transition-colors"
+                  className="h-11 w-full rounded-lg border border-border bg-secondary pl-10 pr-11 text-sm text-foreground placeholder:text-muted-foreground focus:border-emerald focus:ring-1 focus:ring-emerald/40 focus:outline-none disabled:opacity-50 transition-colors"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  disabled={loading}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                >
+                  {showPassword ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -119,7 +136,7 @@ export function UpdatePasswordForm({ email }: UpdatePasswordFormProps) {
                 <Lock className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <input
                   id="confirm"
-                  type="password"
+                  type={showConfirm ? "text" : "password"}
                   autoComplete="new-password"
                   required
                   minLength={6}
@@ -127,8 +144,23 @@ export function UpdatePasswordForm({ email }: UpdatePasswordFormProps) {
                   onChange={(e) => setConfirm(e.target.value)}
                   disabled={loading}
                   placeholder="Re-enter your new password"
-                  className="h-11 w-full rounded-lg border border-border bg-secondary pl-10 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-emerald focus:ring-1 focus:ring-emerald/40 focus:outline-none disabled:opacity-50 transition-colors"
+                  className="h-11 w-full rounded-lg border border-border bg-secondary pl-10 pr-11 text-sm text-foreground placeholder:text-muted-foreground focus:border-emerald focus:ring-1 focus:ring-emerald/40 focus:outline-none disabled:opacity-50 transition-colors"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm((v) => !v)}
+                  disabled={loading}
+                  aria-label={
+                    showConfirm ? "Hide confirm password" : "Show confirm password"
+                  }
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                >
+                  {showConfirm ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                </button>
               </div>
             </div>
 

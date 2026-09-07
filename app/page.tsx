@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation"
+
 import { Dashboard } from "@/components/dashboard"
 import { MarketingLanding } from "@/components/marketing-landing"
 import { SetupRequired } from "@/components/setup-required"
@@ -6,7 +8,24 @@ import { getQuotaStatus } from "@/lib/quota"
 
 export const dynamic = "force-dynamic"
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const params = await searchParams
+  // Auth emails sometimes land on Site URL (`/?code=...`) instead of
+  // `/auth/callback`. Forward so signup / reset still complete.
+  const code = typeof params.code === "string" ? params.code : null
+  if (code) {
+    const nextRaw = typeof params.next === "string" ? params.next : "/"
+    const next =
+      nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/"
+    redirect(
+      `/auth/callback?code=${encodeURIComponent(code)}&next=${encodeURIComponent(next)}`,
+    )
+  }
+
   const supabase = await createSupabaseServer()
   if (!supabase) {
     return <SetupRequired />

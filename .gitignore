@@ -4,9 +4,12 @@ __v0_devtools.tsx
 __v0_jsx-dev-runtime.ts
 .snowflake/
 .v0-trash/
-.vercel/
 
-# Environment variables
+# Vercel CLI
+.vercel
+
+# Environment variables (keep .env.example tracked)
+.env
 .env*.local
 
 # Common ignores
