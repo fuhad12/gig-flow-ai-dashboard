@@ -67,9 +67,13 @@ In the Supabase dashboard:
     - `https://jobflow.win/auth/callback`
     - `https://jobflow.win/auth/update-password`
     - (Also keep localhost equivalents for local testing.)
-- **Authentication → Email Templates → Confirm signup**: brand as JobFlow.
-  Supabase’s default confirmation link (`{{ .ConfirmationURL }}`) is fine —
-  it redirects through `/auth/callback` after exchange.
+- **Authentication → Email Templates** — use `token_hash` links (works across
+  browsers; avoids PKCE “code verifier not found” errors):
+  - **Confirm signup** body link:
+    `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/`
+  - **Reset password** body link:
+    `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password`
+  - Site URL must be `https://jobflow.win` in production (not localhost).
 
 ### 2.4 Send auth email via Resend (required for production)
 

@@ -1,21 +1,23 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createServerClient, type CookieOptions } from "@supabase/ssr"
+import type { EmailOtpType } from "@supabase/supabase-js"
 
 /**
- * Auth email landing (PKCE). Prefer /auth/confirm?token_hash=… for email
- * links when possible — that flow works across browsers/devices.
+ * Email-link confirm without PKCE (works across browsers/devices).
  *
- * Cookies must be written onto the redirect response, not only via
- * next/headers cookies(), or the session (and PKCE exchange) can fail.
+ * Supabase templates should use:
+ *   {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password
+ *   {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
-  const code = searchParams.get("code")
+  const token_hash = searchParams.get("token_hash")
+  const type = searchParams.get("type") as EmailOtpType | null
   const next = sanitizeNext(searchParams.get("next"))
 
-  if (!code) {
+  if (!token_hash || !type) {
     return NextResponse.redirect(
-      `${origin}/auth?error=${encodeURIComponent("Missing code in callback URL")}`,
+      `${origin}/auth?error=${encodeURIComponent("Invalid or incomplete confirm link")}`,
     )
   }
 
@@ -27,7 +29,11 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const redirectResponse = NextResponse.redirect(`${origin}${next}`)
+  const redirectTo =
+    type === "recovery" ? "/auth/update-password" : next
+  const redirectResponse = NextResponse.redirect(
+    `${origin}${sanitizeNext(redirectTo)}`,
+  )
 
   const supabase = createServerClient(url, anonKey, {
     cookies: {
@@ -44,7 +50,7 @@ export async function GET(request: NextRequest) {
     },
   })
 
-  const { error } = await supabase.auth.exchangeCodeForSession(code)
+  const { error } = await supabase.auth.verifyOtp({ type, token_hash })
   if (error) {
     return NextResponse.redirect(
       `${origin}/auth?error=${encodeURIComponent(error.message)}`,
