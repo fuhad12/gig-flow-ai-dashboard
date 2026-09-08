@@ -3,6 +3,7 @@
  * then signups, then commission earned.
  */
 
+import { isAdminEmail } from "@/lib/admin"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 
 export type LeaderboardPeriod = "all" | "month"
@@ -48,7 +49,7 @@ export async function buildInfluencerLeaderboard(
 
   let profilesQuery = admin
     .from("profiles")
-    .select("id, referred_by_influencer_id, created_at")
+    .select("id, email, referred_by_influencer_id, created_at")
     .in("referred_by_influencer_id", ids)
 
   if (since) {
@@ -73,6 +74,7 @@ export async function buildInfluencerLeaderboard(
 
   const signupCounts = new Map<string, number>()
   for (const p of profiles ?? []) {
+    if (isAdminEmail((p.email as string | null) ?? null)) continue
     const id = p.referred_by_influencer_id as string
     signupCounts.set(id, (signupCounts.get(id) ?? 0) + 1)
   }

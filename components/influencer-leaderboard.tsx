@@ -203,14 +203,9 @@ export function InfluencerLeaderboard({
                       </TableCell>
                       <TableCell>
                         <div className="flex min-w-0 items-center gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">
-                              {e.name}
-                            </p>
-                            <p className="truncate text-[11px] text-muted-foreground">
-                              /r/{e.code}
-                            </p>
-                          </div>
+                          <p className="truncate text-sm font-medium">
+                            {e.name}
+                          </p>
                           {isYou && (
                             <Badge
                               variant="outline"

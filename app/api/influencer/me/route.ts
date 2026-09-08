@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { isAdminEmail } from "@/lib/admin"
 import { normalizeInfluencerEmail } from "@/lib/referral"
 import { resolveTier } from "@/lib/quota"
 import { getSiteUrl } from "@/lib/stripe"
@@ -58,15 +59,7 @@ export async function GET() {
 
   const influencerId = influencer.id as string
 
-  const [
-    { count: referredCount },
-    { data: referredProfiles },
-    { data: commissions },
-  ] = await Promise.all([
-    admin
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .eq("referred_by_influencer_id", influencerId),
+  const [{ data: referredProfiles }, { data: commissions }] = await Promise.all([
     admin
       .from("profiles")
       .select(
@@ -85,7 +78,10 @@ export async function GET() {
       .limit(100),
   ])
 
-  const referred = referredProfiles ?? []
+  // Hide platform admins from partner-facing referral lists / counts.
+  const referred = (referredProfiles ?? []).filter(
+    (r) => !isAdminEmail((r.email as string | null) ?? null),
+  )
   const rows = commissions ?? []
   const pendingCents = rows
     .filter((r) => r.status === "pending")
@@ -110,7 +106,7 @@ export async function GET() {
       referralUrl: `${site}/r/${influencer.code}`,
     },
     stats: {
-      referredSignups: referredCount ?? referred.length,
+      referredSignups: referred.length,
       proConversions: convertedUserIds.size,
       pendingCents,
       paidCents,

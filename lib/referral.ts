@@ -3,6 +3,7 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
+import { isAdminEmail } from "@/lib/admin"
 
 export const REF_COOKIE = "jf_ref"
 export const REF_COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 30 // 30 days
@@ -71,16 +72,13 @@ export async function getActiveInfluencerByCode(
 /**
  * First-touch: set referred_by_influencer_id if still null and influencer is active.
  * Returns true if attribution was applied (or already matched this influencer).
+ * Platform admin emails (ADMIN_EMAILS) are never attributed and any prior
+ * attribution on them is cleared so they stay off partner dashboards.
  */
 export async function attributeReferralToUser(
   userId: string,
   code: string,
 ): Promise<{ attributed: boolean; reason?: string }> {
-  const influencer = await getActiveInfluencerByCode(code)
-  if (!influencer) {
-    return { attributed: false, reason: "invalid_or_inactive_code" }
-  }
-
   const admin = getSupabaseAdmin()
   if (!admin) {
     return { attributed: false, reason: "db_unavailable" }
@@ -88,9 +86,25 @@ export async function attributeReferralToUser(
 
   const { data: profile } = await admin
     .from("profiles")
-    .select("referred_by_influencer_id")
+    .select("referred_by_influencer_id, email")
     .eq("id", userId)
     .maybeSingle()
+
+  const profileEmail = (profile?.email as string | null) ?? null
+  if (isAdminEmail(profileEmail)) {
+    if (profile?.referred_by_influencer_id) {
+      await admin
+        .from("profiles")
+        .update({ referred_by_influencer_id: null })
+        .eq("id", userId)
+    }
+    return { attributed: false, reason: "admin_excluded" }
+  }
+
+  const influencer = await getActiveInfluencerByCode(code)
+  if (!influencer) {
+    return { attributed: false, reason: "invalid_or_inactive_code" }
+  }
 
   const existing = profile?.referred_by_influencer_id as string | null | undefined
   if (existing) {
