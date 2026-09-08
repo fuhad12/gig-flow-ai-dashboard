@@ -120,6 +120,36 @@ export function nicheLimitForTier(tier: Tier): number {
   }
 }
 
+/**
+ * Monthly niche-trend scrapes (Firecrawl / Apify) per tier.
+ * Separate from AI credits — each Load/Refresh that actually scrapes
+ * Fiverr burns one trend scrape, not an AI credit.
+ */
+export const FREE_MONTHLY_TREND_LIMIT = parseInt(
+  process.env.FREE_MONTHLY_TREND_LIMIT ?? "2",
+  10,
+)
+export const PRO_MONTHLY_TREND_LIMIT = parseInt(
+  process.env.PRO_MONTHLY_TREND_LIMIT ?? "7",
+  10,
+)
+export const AGENCY_MONTHLY_TREND_LIMIT = parseInt(
+  process.env.AGENCY_MONTHLY_TREND_LIMIT ?? "15",
+  10,
+)
+
+export function monthlyTrendLimitForTier(tier: Tier): number {
+  switch (tier) {
+    case "agency":
+      return AGENCY_MONTHLY_TREND_LIMIT
+    case "pro":
+      return PRO_MONTHLY_TREND_LIMIT
+    case "free":
+    default:
+      return FREE_MONTHLY_TREND_LIMIT
+  }
+}
+
 // ---------- Profile snapshot ----------
 
 export type SubscriptionPlan = Plan | null
@@ -693,5 +723,74 @@ export async function getTrackedGigQuota(
     limit,
     allowed: used < limit,
     isPremium: profile.isPremium,
+  }
+}
+
+// ---------- Trend scrape quota (Firecrawl / Apify) ----------
+
+const TREND_SCRAPES_TABLE = "trend_scrapes"
+
+export interface TrendScrapeQuota {
+  used: number
+  limit: number
+  remaining: number
+  allowed: boolean
+  isPremium: boolean
+  tier: Tier
+  resetsAt: string
+}
+
+async function countTrendScrapesThisMonth(userId: string): Promise<number> {
+  const supabase = getSupabaseAdmin()
+  if (!supabase) return 0
+  const { count, error } = await supabase
+    .from(TREND_SCRAPES_TABLE)
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("created_at", startOfMonthIso())
+  if (error) {
+    console.error("[quota] trend scrapes count failed:", error.message)
+    return 0
+  }
+  return count ?? 0
+}
+
+/**
+ * Monthly trend-scrape usage for a user (Free 2 / Pro 7 / Agency 15).
+ * Cached niche reads do not count — only requests that trigger a scrape.
+ */
+export async function getTrendScrapeQuota(
+  userId: string,
+): Promise<TrendScrapeQuota> {
+  const [profile, used] = await Promise.all([
+    getProfile(userId),
+    countTrendScrapesThisMonth(userId),
+  ])
+  const limit = monthlyTrendLimitForTier(profile.tier)
+  const remaining = Math.max(0, limit - used)
+  return {
+    used,
+    limit,
+    remaining,
+    allowed: used < limit,
+    isPremium: profile.isPremium,
+    tier: profile.tier,
+    resetsAt: startOfNextMonthIso(),
+  }
+}
+
+/** Record that this user just triggered a billable niche scrape. */
+export async function recordTrendScrape(
+  userId: string,
+  nicheSlug: string,
+): Promise<void> {
+  const supabase = getSupabaseAdmin()
+  if (!supabase) return
+  const { error } = await supabase.from(TREND_SCRAPES_TABLE).insert({
+    user_id: userId,
+    niche_slug: nicheSlug,
+  })
+  if (error) {
+    console.error("[quota] recordTrendScrape failed:", error.message)
   }
 }

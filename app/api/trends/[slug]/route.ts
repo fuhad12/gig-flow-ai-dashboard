@@ -3,7 +3,11 @@ import { NextResponse } from "next/server"
 import { createSupabaseServer } from "@/lib/supabase/server"
 import { getNicheSnapshot } from "@/lib/trends"
 import { getNiche, NICHES } from "@/lib/niches"
-import { getProfile, getQuotaStatus } from "@/lib/quota"
+import {
+  getProfile,
+  getTrendScrapeQuota,
+  recordTrendScrape,
+} from "@/lib/quota"
 
 export const runtime = "nodejs"
 export const maxDuration = 90
@@ -24,7 +28,7 @@ export async function GET(
     )
   }
 
-  // Require auth — trends data sits behind login (also gates Firecrawl spend).
+  // Require auth — trends data sits behind login (also gates scrape spend).
   const supabase = await createSupabaseServer()
   if (!supabase) {
     return NextResponse.json(
@@ -45,42 +49,30 @@ export async function GET(
   const url = new URL(req.url)
   const refreshRequested = url.searchParams.get("refresh") === "true"
 
-  // ---- Scope gate: only pinned niches can trigger a Firecrawl call ----
+  // ---- Scope gate: only pinned niches can trigger a scrape ----
   //
-  // Firecrawl spend is the single biggest variable cost we have. We
-  // restrict EVERY path that hits Firecrawl — explicit refresh,
-  // cache-miss scrape, AND stale-cache auto-refresh — to niches the
-  // user has pinned in Settings. This keeps the crawl tightly scoped
-  // to what the user actually cares about instead of fetching the
-  // entire catalog of services.
-  //
-  // For non-pinned niches the user gets a `readOnly` snapshot: any
-  // cached gigs render (even if stale), and they see an empty state +
-  // "pin this niche" hint when the cache is empty. Refresh requests
-  // come back as 403 with the same hint so the UI can show a CTA.
+  // Firecrawl/Apify spend is gated to niches the user pinned in Settings.
+  // Non-pinned niches get a readOnly snapshot (shared cache if any).
   const profile = await getProfile(user.id)
   const isPinned = profile.selectedNiches.includes(slug)
 
-  // ---- Credit gate ----
+  // ---- Trend scrape quota (Free 2 / Pro 7 / Agency 15 per month) ----
   //
-  // Even for pinned niches, refresh and cache-miss scrapes consume
-  // billable resources (Firecrawl + downstream LLM analysis). When the
-  // user has run their monthly AI credit pool dry we refuse those
-  // scrapes and serve whatever's cached. Explicit refresh requests
-  // surface as a 402 so the client can pop the paywall.
-  let quota
+  // Separate from AI credits. Cached reads are free; only a real scrape
+  // burns one trend scrape. Explicit refresh while out of quota → 402.
+  let trendQuota
   try {
-    quota = await getQuotaStatus(user.id)
+    trendQuota = await getTrendScrapeQuota(user.id)
   } catch (err) {
-    console.error("[trends] getQuotaStatus failed:", err)
+    console.error("[trends] getTrendScrapeQuota failed:", err)
     return NextResponse.json(
       {
-        error: "Could not load your credit balance. Try again in a moment.",
+        error: "Could not load your trend scrape balance. Try again in a moment.",
       },
       { status: 503 },
     )
   }
-  const canScrape = isPinned && quota.allowed
+  const canScrape = isPinned && trendQuota.allowed
 
   if (refreshRequested && !canScrape) {
     if (!isPinned) {
@@ -95,41 +87,33 @@ export async function GET(
     }
     return NextResponse.json(
       {
-        error: quota.isPremium
-          ? "You've used all your monthly AI credits. Buy a credit top-up to refresh trends."
-          : "Free plan limit reached. Upgrade to Pro to refresh trends.",
-        quota,
+        error: trendQuota.isPremium
+          ? `You've used all ${trendQuota.limit} trend scrapes this month. Upgrade your plan or wait until next month.`
+          : `Free plan includes ${trendQuota.limit} trend scrapes per month. Upgrade to Pro for more.`,
+        trendQuota,
       },
       { status: 402 },
     )
   }
 
   try {
-    // Unpinned / out-of-credits: cache-only, never wait on Fiverr scrape.
-    const snapshot = await getNicheSnapshot(slug, {
+    const { snapshot, scraped } = await getNicheSnapshot(slug, {
       refresh: refreshRequested && canScrape,
       readOnly: !canScrape,
     })
 
-    // ---- Soft empty state for "no data yet" cases ----
-    //
-    // Earlier versions of this route returned 403 / 402 here, which
-    // made the client render a red "Could not load trends" error
-    // banner — confusing because nothing was actually broken. Browsing
-    // an unpinned niche should feel like an opt-in step, not a server
-    // failure. We now return 200 with `snapshot: null` and an
-    // `emptyReason` flag the client uses to pick the right friendly
-    // empty state (pin CTA, paywall CTA, etc.).
-    //
-    // 402 stays only for the case where the user EXPLICITLY hit
-    // "Refresh" on a pinned niche while out of credits — that one
-    // needs to pop the paywall modal, not render an empty card.
+    if (scraped) {
+      await recordTrendScrape(user.id, slug)
+      trendQuota = await getTrendScrapeQuota(user.id)
+    }
+
+    // Soft empty state when there's nothing cached and we couldn't scrape.
     if (snapshot.gigs.length === 0) {
-      const emptyReason: "not_pinned" | "out_of_credits" | "no_data_yet" =
+      const emptyReason: "not_pinned" | "out_of_trend_quota" | "no_data_yet" =
         !isPinned
           ? "not_pinned"
-          : !quota.allowed
-            ? "out_of_credits"
+          : !trendQuota.allowed
+            ? "out_of_trend_quota"
             : "no_data_yet"
 
       return NextResponse.json(
@@ -137,24 +121,28 @@ export async function GET(
           niches: NICHES,
           snapshot: null,
           pinned: isPinned,
-          canRefresh: canScrape,
+          canRefresh: canScrape && trendQuota.allowed,
           emptyReason,
-          quota,
+          trendQuota,
         },
         { status: 200 },
       )
     }
 
     return NextResponse.json(
-      { niches: NICHES, snapshot, pinned: isPinned, canRefresh: canScrape },
+      {
+        niches: NICHES,
+        snapshot,
+        pinned: isPinned,
+        canRefresh: isPinned && trendQuota.allowed,
+        trendQuota,
+      },
       { status: 200 },
     )
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to load niche trends"
     console.error("[trends] snapshot failed:", message)
-    // Prefer a soft empty state over a hard error when the user simply
-    // hasn't pinned anything yet — same UX as an empty cache.
     if (!isPinned) {
       return NextResponse.json(
         {
@@ -163,10 +151,11 @@ export async function GET(
           pinned: false,
           canRefresh: false,
           emptyReason: "not_pinned" as const,
+          trendQuota,
         },
         { status: 200 },
       )
     }
-    return NextResponse.json({ error: message }, { status: 502 })
+    return NextResponse.json({ error: message, trendQuota }, { status: 502 })
   }
 }

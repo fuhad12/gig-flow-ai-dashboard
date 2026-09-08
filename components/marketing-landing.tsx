@@ -29,10 +29,13 @@ import { Button } from "@/components/ui/button"
 import { BeforeAfterShowcase } from "@/components/before-after-showcase"
 import {
   AGENCY_MONTHLY_SCAN_LIMIT,
+  AGENCY_MONTHLY_TREND_LIMIT,
   AGENCY_TRACKED_GIG_LIMIT,
   FREE_MONTHLY_SCAN_LIMIT,
+  FREE_MONTHLY_TREND_LIMIT,
   FREE_TRACKED_GIG_LIMIT,
   PRO_MONTHLY_SCAN_LIMIT,
+  PRO_MONTHLY_TREND_LIMIT,
   PRO_TRACKED_GIG_LIMIT,
 } from "@/lib/quota"
 
@@ -310,7 +313,7 @@ function Pricing() {
         `${FREE_MONTHLY_SCAN_LIMIT} AI credits per month`,
         "Fiverr audits + Upwork proposals",
         "AI gig generator",
-        "Niche trends &amp; pricing intel",
+        `${FREE_MONTHLY_TREND_LIMIT} niche trend scrapes per month`,
         `${FREE_TRACKED_GIG_LIMIT} tracked competitor gig`,
       ],
     },
@@ -324,7 +327,7 @@ function Pricing() {
       bullets: [
         `${PRO_MONTHLY_SCAN_LIMIT} AI credits per month`,
         "Fiverr audits, generations &amp; Upwork proposals",
-        "Trend &amp; keyword intelligence",
+        `${PRO_MONTHLY_TREND_LIMIT} niche trend scrapes per month`,
         `Up to ${PRO_TRACKED_GIG_LIMIT} tracked competitors with auto-refresh`,
         "Top up anytime if you spike past your cap",
       ],
@@ -338,6 +341,7 @@ function Pricing() {
       bullets: [
         `${AGENCY_MONTHLY_SCAN_LIMIT} AI credits per month`,
         "Everything in Pro",
+        `${AGENCY_MONTHLY_TREND_LIMIT} niche trend scrapes per month`,
         `Up to ${AGENCY_TRACKED_GIG_LIMIT} tracked competitor gigs`,
         "Side-by-side gig comparisons",
         "Priority AI processing",

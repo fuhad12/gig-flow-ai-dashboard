@@ -4,7 +4,7 @@ import { z } from "zod"
 import { createSupabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { getLlmProvider } from "@/lib/llm/provider"
-import { getProfile, getQuotaStatus } from "@/lib/quota"
+import { getQuotaStatus } from "@/lib/quota"
 import { getNicheSnapshot, type NicheSnapshot } from "@/lib/trends"
 import { getNiche, NICHES } from "@/lib/niches"
 import type { NicheInsights } from "@/lib/insights-types"
@@ -181,24 +181,14 @@ export async function GET(
   const url = new URL(req.url)
   const regenerate = url.searchParams.get("regenerate") === "true"
 
-  // Credit gate + scope gate. Cached insights are free; anything that
-  // triggers a fresh LLM call (cache miss OR explicit regenerate)
-  // requires the user to have budget AND to have pinned this niche —
-  // we never auto-Firecrawl a non-pinned niche on this code path either.
-  const [quota, profile] = await Promise.all([
-    getQuotaStatus(user.id),
-    getProfile(user.id),
-  ])
-  const isPinned = profile.selectedNiches.includes(slug)
+  // Credit gate for LLM. Snapshot is always readOnly — Firecrawl/Apify
+  // scrapes are metered on the main trends Load/Refresh path only.
+  const quota = await getQuotaStatus(user.id)
   const canSpend = quota.allowed
-  const canScrape = isPinned && canSpend
 
-  // 1. Load the underlying snapshot. `readOnly` blocks the stale auto-
-  //    refresh path so a passive insights call doesn't accidentally
-  //    Firecrawl a non-pinned niche on the side.
   let snapshot: NicheSnapshot
   try {
-    snapshot = await getNicheSnapshot(slug, { readOnly: !canScrape })
+    ;({ snapshot } = await getNicheSnapshot(slug, { readOnly: true }))
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to load snapshot" },

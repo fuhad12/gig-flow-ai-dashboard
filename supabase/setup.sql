@@ -283,6 +283,28 @@ create policy "niche_gigs: signed-in users can read"
 
 
 -- =============================================================================
+-- 5b. trend_scrapes  (meters Firecrawl/Apify niche scrapes per user/month)
+-- =============================================================================
+
+create table if not exists public.trend_scrapes (
+  id          uuid          primary key default gen_random_uuid(),
+  user_id     uuid          not null references auth.users(id) on delete cascade,
+  niche_slug  text          not null,
+  created_at  timestamptz   not null default now()
+);
+
+create index if not exists trend_scrapes_user_id_created_at_idx
+  on public.trend_scrapes (user_id, created_at desc);
+
+alter table public.trend_scrapes enable row level security;
+
+drop policy if exists "trend_scrapes: users can read their own rows" on public.trend_scrapes;
+create policy "trend_scrapes: users can read their own rows"
+  on public.trend_scrapes for select
+  using (auth.uid() = user_id);
+
+
+-- =============================================================================
 -- 6. niche_insights  (cached LLM market-intel per (niche_slug, scraped_at))
 -- =============================================================================
 
@@ -683,5 +705,6 @@ alter table public.referral_commissions enable row level security;
 -- You should see (in any order):
 --   credit_topups, gig_analyses, gig_generations, influencers, niche_gigs,
 --   niche_insights, notifications, profiles, referral_commissions,
---   serp_snapshots, tracked_gig_snapshots, tracked_gigs, tracked_keywords
+--   serp_snapshots, tracked_gig_snapshots, tracked_gigs, tracked_keywords,
+--   trend_scrapes
 -- =============================================================================

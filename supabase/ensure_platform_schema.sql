@@ -261,3 +261,23 @@ revoke all on function public.reserve_credit_slot(uuid, text, integer, jsonb)
   from public;
 grant execute on function public.reserve_credit_slot(uuid, text, integer, jsonb)
   to authenticated, service_role;
+
+-- ---------- Trend scrape meter (Free 2 / Pro 7 / Agency 15) ----------
+
+create table if not exists public.trend_scrapes (
+  id          uuid          primary key default gen_random_uuid(),
+  user_id     uuid          not null references auth.users(id) on delete cascade,
+  niche_slug  text          not null,
+  created_at  timestamptz   not null default now()
+);
+
+create index if not exists trend_scrapes_user_id_created_at_idx
+  on public.trend_scrapes (user_id, created_at desc);
+
+alter table public.trend_scrapes enable row level security;
+
+drop policy if exists "trend_scrapes: users can read their own rows"
+  on public.trend_scrapes;
+create policy "trend_scrapes: users can read their own rows"
+  on public.trend_scrapes for select
+  using (auth.uid() = user_id);

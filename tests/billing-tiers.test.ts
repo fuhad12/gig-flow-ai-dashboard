@@ -123,9 +123,13 @@ vi.mock("@/lib/supabase/admin", () => ({
 import {
   chargeCredit,
   monthlyLimitForTier,
+  monthlyTrendLimitForTier,
   FREE_MONTHLY_SCAN_LIMIT,
   PRO_MONTHLY_SCAN_LIMIT,
   AGENCY_MONTHLY_SCAN_LIMIT,
+  FREE_MONTHLY_TREND_LIMIT,
+  PRO_MONTHLY_TREND_LIMIT,
+  AGENCY_MONTHLY_TREND_LIMIT,
 } from "@/lib/quota"
 import { planForPrice, tierOf } from "@/lib/stripe"
 
@@ -172,10 +176,21 @@ describe("monthlyLimitForTier", () => {
     expect(monthlyLimitForTier("agency")).toBe(AGENCY_MONTHLY_SCAN_LIMIT)
   })
 
-  it("uses sane defaults of 2 / 20 / 50", () => {
+  it("uses sane defaults of 5 / 20 / 50", () => {
     expect(FREE_MONTHLY_SCAN_LIMIT).toBe(5)
     expect(PRO_MONTHLY_SCAN_LIMIT).toBe(20)
     expect(AGENCY_MONTHLY_SCAN_LIMIT).toBe(50)
+  })
+})
+
+describe("monthlyTrendLimitForTier", () => {
+  it("returns Free 2 / Pro 7 / Agency 15", () => {
+    expect(monthlyTrendLimitForTier("free")).toBe(FREE_MONTHLY_TREND_LIMIT)
+    expect(monthlyTrendLimitForTier("pro")).toBe(PRO_MONTHLY_TREND_LIMIT)
+    expect(monthlyTrendLimitForTier("agency")).toBe(AGENCY_MONTHLY_TREND_LIMIT)
+    expect(FREE_MONTHLY_TREND_LIMIT).toBe(2)
+    expect(PRO_MONTHLY_TREND_LIMIT).toBe(7)
+    expect(AGENCY_MONTHLY_TREND_LIMIT).toBe(15)
   })
 })
 

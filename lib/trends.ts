@@ -266,29 +266,35 @@ export async function getAllCachedSnapshots(): Promise<NicheSnapshot[]> {
  *   - `refresh: true`  — bypass the cache and always re-scrape.
  *   - `readOnly: true` — never scrape. Serves whatever's in cache, even
  *                       if stale, and returns an empty snapshot when no
- *                       cache exists. Used to gate Firecrawl spend for
- *                       users who've exhausted their AI-credit pool —
- *                       they can keep browsing what's already cached
- *                       without us paying for fresh scrapes.
+ *                       cache exists. Used to gate Firecrawl/Apify spend.
  *
  * `readOnly` overrides `refresh` (a user who can't scrape can't refresh).
+ *
+ * `scraped` is true only when this call actually hit Fiverr — callers
+ * use that to burn a monthly trend-scrape credit.
  */
 export async function getNicheSnapshot(
   slug: string,
   options: { refresh?: boolean; readOnly?: boolean } = {},
-): Promise<NicheSnapshot> {
+): Promise<{ snapshot: NicheSnapshot; scraped: boolean }> {
   const niche = getNiche(slug)
   if (!niche) throw new Error(`Unknown niche slug: ${slug}`)
 
   if (options.readOnly) {
     const cached = await readLatestGigs(slug)
-    return buildSnapshot(niche, cached.gigs, cached.scrapedAt, true)
+    return {
+      snapshot: buildSnapshot(niche, cached.gigs, cached.scrapedAt, true),
+      scraped: false,
+    }
   }
 
   if (!options.refresh) {
     const cached = await readLatestGigs(slug)
     if (cached.gigs.length > 0 && isFresh(cached.scrapedAt)) {
-      return buildSnapshot(niche, cached.gigs, cached.scrapedAt, true)
+      return {
+        snapshot: buildSnapshot(niche, cached.gigs, cached.scrapedAt, true),
+        scraped: false,
+      }
     }
   }
 
@@ -300,7 +306,10 @@ export async function getNicheSnapshot(
     // If we have stale data, serve it rather than 502-ing the user.
     const cached = await readLatestGigs(slug)
     if (cached.gigs.length > 0) {
-      return buildSnapshot(niche, cached.gigs, cached.scrapedAt, false)
+      return {
+        snapshot: buildSnapshot(niche, cached.gigs, cached.scrapedAt, false),
+        scraped: false,
+      }
     }
     throw err
   }
@@ -316,5 +325,8 @@ export async function getNicheSnapshot(
     position: g.position,
   }))
 
-  return buildSnapshot(niche, gigs, scrapedAt, true)
+  return {
+    snapshot: buildSnapshot(niche, gigs, scrapedAt, true),
+    scraped: true,
+  }
 }

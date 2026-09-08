@@ -333,13 +333,9 @@ export async function GET(
     )
   }
 
-  // Credit + scope gate. When the user is either out of monthly AI
-  // credits OR viewing a niche they haven't pinned, we (a) block any
-  // Firecrawl auto-refresh on stale snapshots (readOnly) and (b) skip
-  // the LLM enrichment. The page still works — users see the
-  // statistical candidates without AI-classified intent / difficulty
-  // labels — but we never burn Firecrawl / LLM on niches the user
-  // hasn't asked for.
+  // Scope + AI-credit gate for LLM enrichment only. Snapshot is always
+  // readOnly — Firecrawl/Apify scrapes are metered on the main trends
+  // Load/Refresh path, not here.
   const [quota, profile] = await Promise.all([
     getQuotaStatus(user.id),
     getProfile(user.id),
@@ -347,10 +343,9 @@ export async function GET(
   const isPinned = profile.selectedNiches.includes(slug)
   const canSpend = quota.allowed && isPinned
 
-  // Load the existing niche snapshot — doesn't re-scrape unless stale.
   let snapshot
   try {
-    snapshot = await getNicheSnapshot(slug, { readOnly: !canSpend })
+    ;({ snapshot } = await getNicheSnapshot(slug, { readOnly: true }))
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to load snapshot" },

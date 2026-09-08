@@ -38,11 +38,22 @@ import { KeywordDiscoveryCard } from "@/components/keyword-discovery-card"
 
 /**
  * Reason the server returned a 200 with `snapshot: null`. Drives the
- * empty-state UI: "not_pinned" shows a pin CTA, "out_of_credits" shows
- * a paywall CTA, "no_data_yet" shows a generic "scraping in progress"
- * placeholder.
+ * empty-state UI: "not_pinned" shows a pin CTA, "out_of_trend_quota"
+ * shows an upgrade CTA, "no_data_yet" shows a retry scrape CTA.
+ * Legacy "out_of_credits" is accepted for older responses.
  */
-type EmptyReason = "not_pinned" | "out_of_credits" | "no_data_yet"
+type EmptyReason =
+  | "not_pinned"
+  | "out_of_trend_quota"
+  | "out_of_credits"
+  | "no_data_yet"
+
+interface TrendQuotaInfo {
+  used: number
+  limit: number
+  remaining: number
+  allowed: boolean
+}
 
 interface TrendsResponse {
   niches: NicheDef[]
@@ -50,12 +61,13 @@ interface TrendsResponse {
   /** Whether the active slug is in the user's pinned niches. */
   pinned?: boolean
   /**
-   * Whether the user has both pinned this niche AND has the budget to
-   * refresh it. Drives the "subscribe to refresh" banner.
+   * Whether the user has both pinned this niche AND has trend scrapes
+   * left this month. Drives the "upgrade to refresh" banner.
    */
   canRefresh?: boolean
   /** Present when `snapshot === null` so the client knows why. */
   emptyReason?: EmptyReason
+  trendQuota?: TrendQuotaInfo
 }
 
 interface TrendsViewProps {
@@ -91,8 +103,9 @@ interface TrendsViewProps {
    */
   onOpenSettings?: () => void
   /**
-   * Whether the user is on a paid plan. Drives banner copy — Pro users
-   * out of credits see "buy a top-up", free users see "upgrade to Pro".
+   * Whether the user is on a paid plan. Drives banner copy — Pro/Agency
+   * users out of monthly trend scrapes see wait/upgrade, free users see
+   * "upgrade to Pro".
    */
   isPremium?: boolean
 }
@@ -117,17 +130,17 @@ export function TrendsView({
   // surface a "subscribe for fresh data" banner when canRefresh === false.
   const [pinned, setPinned] = useState<boolean>(false)
   const [canRefresh, setCanRefresh] = useState<boolean>(false)
+  const [trendQuota, setTrendQuota] = useState<TrendQuotaInfo | null>(null)
   /**
-   * Set when the server returns a 200 with snapshot === null. We render a
-   * dedicated empty-state panel for each reason instead of the generic
-   * red "could not load" error banner — none of these are actual
-   * failures, they're expected UX states.
+   * Soft empty-state reason when the API returned 200 with snapshot:null.
+   * Distinct from hard `error` — these are expected UX states (pin niche,
+   * out of trend scrapes, cold cache) rather than failures.
    */
   const [emptyReason, setEmptyReason] = useState<EmptyReason | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  /** Niches fetch finished (success or fail) — trends wait on this. */
+  /** Niches list loaded — dropdown can render; trends stay idle until button. */
   const [nichesReady, setNichesReady] = useState(false)
 
   // Pull the user's selection once on mount. If they have any pinned, seed
@@ -184,7 +197,7 @@ export function TrendsView({
           const data = (await res.json().catch(() => null)) as
             | { error?: string }
             | null
-          throw new Error(data?.error ?? "Monthly AI credit limit reached")
+          throw new Error(data?.error ?? "Monthly trend scrape limit reached")
         }
         if (!res.ok) {
           const data = (await res.json().catch(() => null)) as
@@ -220,6 +233,7 @@ export function TrendsView({
         setPinned(Boolean(data.pinned))
         setCanRefresh(Boolean(data.canRefresh))
         setEmptyReason(data.emptyReason ?? null)
+        setTrendQuota(data.trendQuota ?? null)
       } catch (err) {
         if (signal?.aborted) return
         const raw = err instanceof Error ? err.message : "Something went wrong"
@@ -239,12 +253,20 @@ export function TrendsView({
     [onQuotaExceeded],
   )
 
-  useEffect(() => {
-    if (!nichesReady) return
-    const ac = new AbortController()
-    void load(selectedSlug, false, ac.signal)
-    return () => ac.abort()
-  }, [selectedSlug, load, nichesReady])
+  const handleNicheChange = (slug: string) => {
+    setSelectedSlug(slug)
+    // Switching niches clears results — user must click Load again.
+    setSnapshot(null)
+    setPinned(false)
+    setCanRefresh(false)
+    setTrendQuota(null)
+    setEmptyReason(null)
+    setError(null)
+    setLoading(false)
+    setRefreshing(false)
+  }
+
+  const idle = nichesReady && !loading && !refreshing && !snapshot && !emptyReason && !error
 
   return (
     <ScrollArea className="h-full">
@@ -257,10 +279,17 @@ export function TrendsView({
             </h2>
             <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
               Live market signals scraped from top-ranking Fiverr gigs
+              {trendQuota
+                ? ` · ${trendQuota.remaining}/${trendQuota.limit} scrapes left this month`
+                : ""}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={selectedSlug} onValueChange={setSelectedSlug}>
+            <Select
+              value={selectedSlug}
+              onValueChange={handleNicheChange}
+              disabled={!nichesReady || loading || refreshing}
+            >
               <SelectTrigger className="w-full sm:w-52">
                 <Globe className="mr-2 size-4 text-muted-foreground" />
                 <SelectValue />
@@ -273,31 +302,47 @@ export function TrendsView({
                 ))}
               </SelectContent>
             </Select>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void load(selectedSlug, true)}
-              // Disable while loading OR when the user can't refresh this
-              // niche (not pinned, or out of credits) so we don't fire a
-              // 402 / 403 from a click that the banner already explains.
-              // Allow retry when errored even if !canRefresh (cache read).
-              disabled={loading || refreshing || (!canRefresh && !error)}
-              className="gap-1.5"
-              title={
-                !canRefresh && !error
-                  ? pinned
-                    ? "Out of AI credits — buy a top-up or upgrade to refresh"
-                    : "Pin this niche in Settings to enable refresh"
-                  : undefined
-              }
-            >
-              {refreshing ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="size-3.5" />
-              )}
-              Refresh
-            </Button>
+            {snapshot || emptyReason || error ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void load(selectedSlug, Boolean(snapshot))}
+                disabled={
+                  loading ||
+                  refreshing ||
+                  (!canRefresh && Boolean(snapshot) && !error)
+                }
+                className="gap-1.5"
+                title={
+                  !canRefresh && snapshot && !error
+                    ? pinned
+                      ? "Out of monthly trend scrapes — upgrade or wait until next month"
+                      : "Pin this niche in Settings to enable refresh"
+                    : undefined
+                }
+              >
+                {refreshing || loading ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-3.5" />
+                )}
+                {error ? "Try again" : "Refresh"}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => void load(selectedSlug, false)}
+                disabled={!nichesReady || loading}
+                className="gap-1.5 bg-emerald text-white hover:bg-emerald/90"
+              >
+                {loading ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Search className="size-3.5" />
+                )}
+                Load trends
+              </Button>
+            )}
           </div>
         </div>
 
@@ -319,16 +364,8 @@ export function TrendsView({
           </div>
         )}
 
-        {/* Subscribe-for-fresh-data banner — shown to anyone viewing
-            cached trends without the ability to refresh. Covers three
-            distinct states with one consistent CTA:
-
-              1. Free user viewing a non-pinned niche → upgrade copy.
-              2. Free user out of monthly credits      → upgrade copy.
-              3. Pro user out of credits + no topup    → top-up copy.
-
-            We hide it once the user actually has a fresh snapshot
-            they can refresh (canRefresh === true).                      */}
+        {/* Cached-only banner when the user can't scrape (unpinned or
+            out of monthly trend scrapes). */}
         {snapshot && hasPinned && !canRefresh && (
           <div className="mb-6 flex flex-col items-start justify-between gap-3 rounded-lg border border-violet-500/30 bg-violet-500/5 px-4 py-3 text-sm sm:flex-row sm:items-center">
             <div className="min-w-0">
@@ -344,8 +381,8 @@ export function TrendsView({
                 {!pinned
                   ? "Pin this niche in Settings → My niches & skills to fetch live Fiverr data for it."
                   : isPremium
-                    ? "You've used your monthly AI credits. Buy a credit top-up to refresh and get the latest Fiverr signals."
-                    : "Upgrade to Pro to refresh and get live Fiverr signals scraped just for this niche."}
+                    ? `You've used all ${trendQuota?.limit ?? ""} trend scrapes this month. Upgrade your plan or wait until next month for fresh scrapes.`
+                    : "Free plan includes 2 trend scrapes per month. Upgrade to Pro for 7, or Agency for 15."}
               </div>
             </div>
             {pinned && (
@@ -354,7 +391,7 @@ export function TrendsView({
                 onClick={onUpgrade}
                 className="shrink-0 gap-1.5 bg-violet-500 text-white hover:bg-violet-500/90"
               >
-                {isPremium ? "Buy credit top-up" : "Upgrade to Pro"}
+                {isPremium ? "Upgrade plan" : "Upgrade to Pro"}
               </Button>
             )}
           </div>
@@ -393,11 +430,45 @@ export function TrendsView({
           </div>
         )}
 
+        {/* Idle — wait for explicit Load trends click (no auto-scrape). */}
+        {idle && (
+          <div className="flex h-64 flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-border bg-card/40 px-6 text-center">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">
+                Ready when you are
+              </p>
+              <p className="max-w-md text-xs text-muted-foreground">
+                Pick a niche
+                {hasPinned ? "" : " (pin niches in Settings for live scrapes)"}
+                , then load market signals. A live scrape uses 1 of your
+                monthly trend scrapes; cached data is free.
+              </p>
+            </div>
+            <Button
+              onClick={() => void load(selectedSlug, false)}
+              disabled={!nichesReady}
+              className="gap-1.5 bg-emerald text-white hover:bg-emerald/90"
+            >
+              <Search className="size-4" />
+              Load trends for{" "}
+              {NICHES.find((n) => n.slug === selectedSlug)?.name ?? "niche"}
+            </Button>
+          </div>
+        )}
+
+        {!nichesReady && (
+          <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+            <Loader2 className="mr-2 size-4 animate-spin" />
+            Loading your niches…
+          </div>
+        )}
+
         {/* Loading */}
         {loading && !snapshot && !emptyReason && (
           <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
             <Loader2 className="mr-2 size-4 animate-spin" />
-            Scraping top gigs in {NICHES.find((n) => n.slug === selectedSlug)?.name}...
+            Loading trends for{" "}
+            {NICHES.find((n) => n.slug === selectedSlug)?.name}…
           </div>
         )}
 
@@ -471,15 +542,11 @@ export function TrendsView({
 /**
  * Empty-state panel rendered when the API returned 200 + snapshot null.
  *
- * Three flavors, picked by the `reason` prop:
- *   • not_pinned       — niche is browsable but the user hasn't opted in
- *                        to scrape it. Primary CTA: "Pin in Settings".
- *   • out_of_credits   — pinned niche but no cached data yet AND user is
- *                        out of monthly credits. Primary CTA: upgrade /
- *                        buy a top-up.
- *   • no_data_yet      — pinned + in-budget but Firecrawl hasn't returned
- *                        anything (race / cold cache). Primary CTA:
- *                        retry the scrape.
+ * Flavors:
+ *   • not_pinned          — pin CTA
+ *   • out_of_trend_quota  — monthly trend scrape cap hit (also accepts
+ *                           legacy out_of_credits)
+ *   • no_data_yet         — retry scrape
  */
 function TrendsEmptyState({
   reason,
@@ -510,10 +577,8 @@ function TrendsEmptyState({
           </h3>
           <p className="mt-2 text-sm text-muted-foreground">
             We only scrape Fiverr for niches you&apos;ve pinned — that
-            keeps the data laser-focused on what you sell and saves your
-            AI credits for the niches that matter. Add this niche under
-            Settings → My niches &amp; skills and we&apos;ll pull a fresh
-            snapshot next time you visit.
+            keeps spend on the niches you sell. Add this niche under
+            Settings → My niches &amp; skills, then click Load trends.
           </p>
         </div>
         <Button
@@ -527,7 +592,7 @@ function TrendsEmptyState({
     )
   }
 
-  if (reason === "out_of_credits") {
+  if (reason === "out_of_trend_quota" || reason === "out_of_credits") {
     return (
       <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-violet-500/30 bg-violet-500/5 px-6 py-12 text-center sm:py-16">
         <div className="flex size-12 items-center justify-center rounded-full bg-violet-500/15 text-violet-400">
@@ -539,15 +604,15 @@ function TrendsEmptyState({
           </h3>
           <p className="mt-2 text-sm text-muted-foreground">
             {isPremium
-              ? "You've used your monthly AI credits. Buy a credit top-up and we'll fetch a fresh Fiverr snapshot for this niche."
-              : "Upgrade to Pro to scrape this niche and unlock live keyword + pricing intelligence."}
+              ? "You've used all your trend scrapes this month. Upgrade your plan or wait until next month to fetch a fresh Fiverr snapshot."
+              : "Free plan includes 2 trend scrapes per month. Upgrade to Pro (7) or Agency (15) to scrape this niche."}
           </p>
         </div>
         <Button
           onClick={onUpgrade}
           className="gap-1.5 bg-violet-500 text-white hover:bg-violet-500/90"
         >
-          {isPremium ? "Buy credit top-up" : "Upgrade to Pro"}
+          {isPremium ? "Upgrade plan" : "Upgrade to Pro"}
         </Button>
       </div>
     )
@@ -564,8 +629,9 @@ function TrendsEmptyState({
           No data for {nicheName} yet
         </h3>
         <p className="mt-2 text-sm text-muted-foreground">
-          We haven&apos;t scraped this niche this month. Click refresh to
-          pull a fresh Fiverr snapshot — it uses one AI credit.
+          We haven&apos;t scraped this niche yet. Click fetch to pull a
+          fresh Fiverr snapshot — it uses 1 trend scrape from your monthly
+          allotment.
         </p>
       </div>
       <Button

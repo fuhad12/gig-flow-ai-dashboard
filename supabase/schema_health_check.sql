@@ -17,7 +17,8 @@ with expected_tables(name) as (
     ('notifications'),
     ('credit_topups'),
     ('influencers'),
-    ('referral_commissions')
+    ('referral_commissions'),
+    ('trend_scrapes')
 ),
 expected_columns(table_name, column_name) as (
   values
