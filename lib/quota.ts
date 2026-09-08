@@ -16,7 +16,7 @@ const TOPUPS_TABLE = "credit_topups"
  * deployments don't break. New tiers introduce dedicated env vars.
  */
 export const FREE_MONTHLY_SCAN_LIMIT = parseInt(
-  process.env.FREE_MONTHLY_SCAN_LIMIT ?? "2",
+  process.env.FREE_MONTHLY_SCAN_LIMIT ?? "5",
   10,
 )
 /** Limit for the original "Pro" tier. (Legacy env var: `PREMIUM_MONTHLY_SCAN_LIMIT`.) */

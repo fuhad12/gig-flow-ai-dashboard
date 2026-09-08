@@ -173,7 +173,7 @@ describe("monthlyLimitForTier", () => {
   })
 
   it("uses sane defaults of 2 / 20 / 50", () => {
-    expect(FREE_MONTHLY_SCAN_LIMIT).toBe(2)
+    expect(FREE_MONTHLY_SCAN_LIMIT).toBe(5)
     expect(PRO_MONTHLY_SCAN_LIMIT).toBe(20)
     expect(AGENCY_MONTHLY_SCAN_LIMIT).toBe(50)
   })
@@ -231,9 +231,9 @@ describe("chargeCredit", () => {
 
   it("treats canceled subscriptions as free tier when deciding charge source", async () => {
     resetStub({
-      // Canceled subscription → resolveTier returns "free", limit = 2.
+      // Canceled subscription → resolveTier returns "free", limit = 5.
       profile: { subscription_status: "canceled", subscription_tier: "pro" },
-      analysisCount: 3,
+      analysisCount: 5,
       generationCount: 0,
       rpcResult: { data: "topup-xyz", error: null },
     })

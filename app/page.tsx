@@ -3,12 +3,19 @@ import { redirect } from "next/navigation"
 import { Dashboard } from "@/components/dashboard"
 import { MarketingLanding } from "@/components/marketing-landing"
 import { SetupRequired } from "@/components/setup-required"
+import { confirmFlutterwaveReturn } from "@/lib/billing-activate"
 import { createSupabaseServer } from "@/lib/supabase/server"
 import { getQuotaStatus } from "@/lib/quota"
 import { isAdminEmail } from "@/lib/admin"
 import { isInfluencerEmail } from "@/lib/referral"
 
 export const dynamic = "force-dynamic"
+
+function paramString(
+  value: string | string[] | undefined,
+): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null
+}
 
 export default async function Home({
   searchParams,
@@ -42,6 +49,40 @@ export default async function Home({
   // straight into the dashboard.
   if (!user) {
     return <MarketingLanding />
+  }
+
+  // Flutterwave redirects here after checkout. Verify + activate Pro/top-up
+  // even if the webhook was delayed or misconfigured, then clean the URL.
+  const subscribed = paramString(params.subscribed)
+  const topup = paramString(params.topup)
+  const payStatus = paramString(params.status)?.toLowerCase()
+  const transactionId = paramString(params.transaction_id)
+  const txRef = paramString(params.tx_ref)
+  const paymentReturn =
+    subscribed === "success" ||
+    topup === "success" ||
+    payStatus === "successful" ||
+    payStatus === "success"
+
+  if (paymentReturn && (transactionId || txRef)) {
+    let result: { ok: boolean; reason?: string }
+    try {
+      result = await confirmFlutterwaveReturn({
+        transactionId,
+        txRef,
+        expectedUserId: user.id,
+      })
+    } catch (err) {
+      console.error("[billing] confirm on return failed:", err)
+      redirect("/?billing=failed&reason=exception")
+    }
+    if (result.ok) {
+      redirect("/?billing=updated")
+    }
+    console.error("[billing] confirm returned not ok:", result.reason)
+    redirect(
+      `/?billing=failed&reason=${encodeURIComponent(result.reason ?? "confirm_failed")}`,
+    )
   }
 
   const quota = await getQuotaStatus(user.id)
