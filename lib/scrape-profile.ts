@@ -15,6 +15,12 @@ export interface ScrapedSellerProfile {
   headline: string
   overview: string
   skills: string[]
+  /** Named clients / companies / people explicitly on the profile. */
+  namedClients: string[]
+  /** Employment / contract lines (role + company) from work history. */
+  workHistory: string[]
+  /** Portfolio / published project titles. */
+  portfolioTitles: string[]
   /** Flattened text fed to the LLM. */
   profileText: string
 }
@@ -36,15 +42,41 @@ const profileExtractionSchema = {
     overview: {
       type: "string",
       description:
-        "Full About / Description / Overview / bio text from the profile. Preserve paragraphs.",
+        "Full About / Description / Overview / bio text from the profile. Preserve paragraphs. Do not invent.",
     },
     skills: {
       type: "array",
       items: { type: "string" },
       description: "Skills, specialties, or tags listed on the profile.",
     },
+    namedClients: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "Real client, company, or person names explicitly mentioned on the profile (overview, employment, reviews, portfolio captions). Empty if none. Never invent.",
+    },
+    workHistory: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "Short employment/contract lines as Role at Company (or similar) from work history. Empty if none. Never invent.",
+    },
+    portfolioTitles: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "Published portfolio / project titles visible on the profile. Empty if none. Never invent.",
+    },
   },
-  required: ["displayName", "headline", "overview", "skills"],
+  required: [
+    "displayName",
+    "headline",
+    "overview",
+    "skills",
+    "namedClients",
+    "workHistory",
+    "portfolioTitles",
+  ],
 } as const
 
 const ExtractedSchema = z.object({
@@ -52,6 +84,9 @@ const ExtractedSchema = z.object({
   headline: z.string().default(""),
   overview: z.string().default(""),
   skills: z.array(z.string()).default([]),
+  namedClients: z.array(z.string()).default([]),
+  workHistory: z.array(z.string()).default([]),
+  portfolioTitles: z.array(z.string()).default([]),
 })
 
 interface FirecrawlResponse {
@@ -66,6 +101,9 @@ function flattenProfile(parts: {
   headline: string
   overview: string
   skills: string[]
+  namedClients: string[]
+  workHistory: string[]
+  portfolioTitles: string[]
 }): string {
   const lines = [
     parts.displayName ? `Name: ${parts.displayName}` : null,
@@ -73,6 +111,15 @@ function flattenProfile(parts: {
     parts.overview ? `Overview:\n${parts.overview}` : null,
     parts.skills.length > 0
       ? `Skills:\n${parts.skills.map((s) => `- ${s}`).join("\n")}`
+      : null,
+    parts.namedClients.length > 0
+      ? `Named clients / people / companies (ONLY these may be cited as clients):\n${parts.namedClients.map((s) => `- ${s}`).join("\n")}`
+      : "Named clients / people / companies: (none found — do NOT invent any)",
+    parts.workHistory.length > 0
+      ? `Work history:\n${parts.workHistory.map((s) => `- ${s}`).join("\n")}`
+      : null,
+    parts.portfolioTitles.length > 0
+      ? `Portfolio titles:\n${parts.portfolioTitles.map((s) => `- ${s}`).join("\n")}`
       : null,
   ].filter(Boolean)
   return lines.join("\n\n").trim()
@@ -113,8 +160,8 @@ async function firecrawlScrapeProfile(
 
   const prompt =
     platform === "fiverr"
-      ? "Extract this Fiverr seller profile's display name, professional title, About/description text, and skill/specialty tags. Do not invent content — empty string or empty array if missing. Ignore gig listings and reviews body text except skills."
-      : "Extract this Upwork freelancer profile's display name, profile title/headline, Overview/About text, and skills list. Do not invent content — empty string or empty array if missing. Ignore job history long bodies beyond skill names."
+      ? "Extract this Fiverr seller profile's display name, professional title, full About/description, skill tags, any named clients/companies mentioned, and portfolio/gig titles. Do NOT invent — use empty string/arrays if missing."
+      : "Extract this Upwork freelancer profile's display name, title/headline, FULL Overview/About text, skills, named clients/companies/people mentioned anywhere on the page, employment/work-history lines (role + company), and published portfolio project titles. Do NOT invent — empty string/arrays if missing. Prefer completeness on overview and named entities."
 
   let res: Response
   try {
@@ -172,7 +219,22 @@ async function firecrawlScrapeProfile(
   }
 
   const data = parsed.data
-  const profileText = flattenProfile(data)
+  const namedClients = data.namedClients.map((s) => s.trim()).filter(Boolean)
+  const workHistory = data.workHistory.map((s) => s.trim()).filter(Boolean)
+  const portfolioTitles = data.portfolioTitles
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const skills = data.skills.map((s) => s.trim()).filter(Boolean)
+  const flat = {
+    displayName: data.displayName.trim(),
+    headline: data.headline.trim(),
+    overview: data.overview.trim(),
+    skills,
+    namedClients,
+    workHistory,
+    portfolioTitles,
+  }
+  const profileText = flattenProfile(flat)
   if (profileText.length < 40) {
     throw new Error(
       "That profile page didn't return enough public text. Check the URL is public and try again.",
@@ -182,10 +244,7 @@ async function firecrawlScrapeProfile(
   return {
     platform,
     sourceUrl: url,
-    displayName: data.displayName.trim(),
-    headline: data.headline.trim(),
-    overview: data.overview.trim(),
-    skills: data.skills.map((s) => s.trim()).filter(Boolean),
+    ...flat,
     profileText,
   }
 }
@@ -216,6 +275,9 @@ function mockProfile(
       : ["JavaScript", "React", "Node.js", "Communication", "Hard work"]
 
   const displayName = handle
+  const namedClients: string[] = []
+  const workHistory: string[] = []
+  const portfolioTitles: string[] = []
   return {
     platform,
     sourceUrl: url,
@@ -223,11 +285,17 @@ function mockProfile(
     headline,
     overview,
     skills,
+    namedClients,
+    workHistory,
+    portfolioTitles,
     profileText: flattenProfile({
       displayName,
       headline,
       overview,
       skills,
+      namedClients,
+      workHistory,
+      portfolioTitles,
     }),
   }
 }

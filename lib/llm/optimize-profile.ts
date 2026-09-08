@@ -64,6 +64,24 @@ const DEFAULT_CRITIQUE = [
   "Original profile needed clearer positioning for buyers scanning quickly.",
 ]
 
+/** Strip markdown so overviews paste cleanly into Upwork/Fiverr. */
+export function stripProfileMarkdown(text: string): string {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/(?<!\w)\*([^*\n]+)\*(?!\w)/g, "$1")
+    .replace(/(?<!\w)_([^_\n]+)_(?!\w)/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^\s*\*\s+/gm, "")
+    .replace(/^\s*•\s+/gm, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
 function cleanStrings(items: string[], minLen = 3): string[] {
   return items
     .map((s) => (typeof s === "string" ? s.trim() : ""))
@@ -145,8 +163,8 @@ function normalize(
     score,
     verdict,
     verdictLabel,
-    headline: data.headline.trim(),
-    overview: data.overview.trim(),
+    headline: stripProfileMarkdown(data.headline.trim()),
+    overview: stripProfileMarkdown(data.overview.trim()).replace(/\*/g, ""),
     skills: padList(cleanStrings(data.skills, 2), ["Specialty TBD"], 4, 15),
     suggestedRateUsd: rate,
     suggestedRateLabel: rateLabel(platform),
@@ -170,14 +188,18 @@ function platformOverviewInstructions(platform: ProfilePlatform): string {
       "UPWORK OVERVIEW LENGTH (critical):",
       "- Hard max 5,000 characters. TARGET 2,000–3,500 characters (count characters, not words).",
       "- First 200–250 characters must be a strong hook (visible before Read more).",
-      "- Use short paragraphs; optional bullets after the opening hook.",
+      "- PLAIN TEXT only — no **, *, #, backticks, or markdown links.",
+      "- Short paragraphs with blank lines. Prefer prose. Hyphen lists ('- item') only if needed — never asterisks.",
       "UPWORK TITLE: max 70 characters.",
       "suggestedRateUsd: recommended profile hourly rate in USD (number), or null only if impossible to infer.",
+      "TRUTH: Only name clients/people/companies listed under Named clients / work history in the scrape. If none, write without naming clients.",
     ].join("\n")
   }
   return [
     "FIVERR DESCRIPTION: buyer-first, scannable, ~400–1,200 characters unless more proof is available.",
+    "PLAIN TEXT only — no markdown asterisks.",
     "suggestedRateUsd: suggested starting package price in USD when inferable, else null.",
+    "TRUTH: Never invent clients or metrics not in the scrape.",
   ].join("\n")
 }
 
@@ -202,29 +224,33 @@ export async function optimizeSellerProfile(
     `Tone: ${tone}.`,
     "score: honest 0-100 professionalism + conversion readiness of the CURRENT scraped profile (before rewrite).",
     "Be strict: vague hobbies, buzzwords, 'passionate freelancer', or no clear offer should score under 60.",
-    "headline: paste-ready title/headline for THIS platform's character limits — keep it tight.",
-    "overview: paste-ready about/overview. Plain text with short paragraphs.",
-    "skills: 4-15 concrete skill labels appropriate to the platform.",
+    "headline: paste-ready title/headline for THIS platform's character limits — keep it tight. No markdown.",
+    "overview: paste-ready about/overview. PLAIN TEXT only (no ** or * markdown). Short paragraphs.",
+    "skills: 4-15 concrete skill labels appropriate to the platform — prefer skills already present.",
     "critique: 2-6 specific issues in the ORIGINAL text — call out unprofessional or weak phrasing clearly.",
     "actionPlan: 5-7 ordered steps. Each has title (what to do) + detail (exactly how on the live profile).",
     "  Must cover: headline, overview paste, rate/pricing, skills, and one proof/portfolio step when relevant.",
     "suggestedRateNote: one sentence explaining the rate choice without inventing credentials.",
     "winAngles: 2-5 why the rewrite helps win clients.",
-    "NEVER invent clients, ratings, Job Success %, or earnings not in the scraped text.",
+    "GROUNDING (critical):",
+    "- The scraped block is the ONLY source of truth.",
+    "- NEVER invent clients, companies, countries, tools, earnings, or ratings.",
+    "- If 'Named clients' says none found, do not invent any. Write capability + process without fake logos.",
+    "- When named clients/work history/portfolio titles exist, weave those real names into the overview naturally.",
   ].join("\n")
 
   const userPrompt = [
     `Profile URL: ${input.profileUrl}`,
     `Platform: ${input.platform}`,
     "",
-    "SCRAPED PROFILE TEXT (source of truth — rewrite from this):",
+    "SCRAPED PROFILE TEXT (source of truth — rewrite from this ONLY):",
     "-----",
-    input.profileText.slice(0, 8000),
+    input.profileText.slice(0, 10000),
     "-----",
     "",
     input.platform === "upwork"
-      ? "Produce a full Upwork package: 70-char headline, 2000–3500 character overview, suggested hourly rate, skills, critique, win angles, and a clear numbered action plan."
-      : "Score how professional the CURRENT profile is, then produce the optimized package with a clear action plan and suggested starting price when possible.",
+      ? "Produce a full Upwork package: 70-char headline, 2000–3500 character PLAIN-TEXT overview (no asterisks), suggested hourly rate, skills, critique, win angles, and a clear numbered action plan. Cite only clients/people explicitly listed above."
+      : "Score the CURRENT profile, then produce an optimized package with a clear action plan. Plain text only. Never invent clients.",
   ].join("\n")
 
   const schema = {
@@ -255,7 +281,7 @@ export async function optimizeSellerProfile(
       overview: {
         type: "string",
         description:
-          "Paste-ready overview. Upwork: 2000–3500 characters. Strong first 250 chars.",
+          "Paste-ready overview as PLAIN TEXT only (no markdown **, *, #). Upwork: 2000–3500 characters. Strong first 250 chars. Only real clients from scrape.",
       },
       skills: {
         type: "array",
@@ -363,8 +389,9 @@ export async function optimizeSellerProfile(
               role: "system",
               content: [
                 "Expand this Upwork profile overview to 2000–3500 characters.",
-                "Keep the same specialty and facts — do not invent clients or metrics.",
-                "First 250 characters must be a strong hook. Short paragraphs + optional bullets.",
+                "Keep the same specialty and facts — do not invent clients, companies, countries, or metrics.",
+                "PLAIN TEXT only — no **, *, #, or markdown.",
+                "First 250 characters must be a strong hook. Short paragraphs; hyphen lists only if needed.",
                 "Return JSON only.",
               ].join(" "),
             },
@@ -374,8 +401,8 @@ export async function optimizeSellerProfile(
                 `Current overview (${normalized.overview.length} chars) — too short:`,
                 normalized.overview,
                 "",
-                "Scraped context:",
-                input.profileText.slice(0, 4000),
+                "Scraped context (only source of truth):",
+                input.profileText.slice(0, 5000),
               ].join("\n"),
             },
           ],
@@ -389,7 +416,7 @@ export async function optimizeSellerProfile(
     if (expanded.success) {
       normalized = {
         ...normalized,
-        overview: expanded.data.overview.trim(),
+        overview: stripProfileMarkdown(expanded.data.overview).trim(),
       }
     }
   }
