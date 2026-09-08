@@ -211,7 +211,7 @@ export async function POST(req: Request) {
       /temporarily overloaded/i.test(message)
     return NextResponse.json(
       { error: message, stage: "proposal" },
-      { status: isCapacity ? 503 : 502 },
+      { status: isCapacity ? 503 : 500 },
     )
   }
 }

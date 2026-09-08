@@ -179,7 +179,7 @@ export async function writeUpworkProposal(
           { role: "user", content: userPrompt },
         ],
       }),
-    3072,
+    1536,
     "upwork-proposal",
   )
 

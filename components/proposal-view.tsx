@@ -150,9 +150,16 @@ export function ProposalView({
           bidHint: bidHint ? Number(bidHint) : undefined,
         }),
       })
-      const data = (await res.json()) as {
-        proposal?: UpworkProposal
-        error?: string
+      const rawText = await res.text()
+      let data: { proposal?: UpworkProposal; error?: string } = {}
+      try {
+        data = rawText ? (JSON.parse(rawText) as typeof data) : {}
+      } catch {
+        throw new Error(
+          res.status === 502 || res.status === 504
+            ? "Proposal timed out on the server. Try a shorter job post, or check that OPENAI_API_KEY is set on Vercel."
+            : `Server error (${res.status}). Try again in a moment.`,
+        )
       }
       if (res.status === 402) {
         onUpgrade?.()
