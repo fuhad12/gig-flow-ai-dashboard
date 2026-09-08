@@ -5,6 +5,7 @@ import { MarketingLanding } from "@/components/marketing-landing"
 import { SetupRequired } from "@/components/setup-required"
 import { createSupabaseServer } from "@/lib/supabase/server"
 import { getQuotaStatus } from "@/lib/quota"
+import { isAdminEmail } from "@/lib/admin"
 
 export const dynamic = "force-dynamic"
 
@@ -69,6 +70,7 @@ export default async function Home({
       selectedNiches={quota.selectedNiches}
       skillTags={quota.skillTags}
       needsNicheOnboarding={needsNicheOnboarding}
+      isAdmin={isAdminEmail(user.email)}
     />
   )
 }

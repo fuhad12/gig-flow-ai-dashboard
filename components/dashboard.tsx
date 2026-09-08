@@ -85,6 +85,8 @@ interface DashboardProps {
    * is configure their profile rather than poke at an empty dashboard.
    */
   needsNicheOnboarding: boolean
+  /** Env allowlist — shows Admin nav link when true. */
+  isAdmin?: boolean
 }
 
 const SUPPORT_EMAIL =
@@ -145,6 +147,7 @@ export function Dashboard({
   selectedNiches,
   skillTags,
   needsNicheOnboarding,
+  isAdmin = false,
 }: DashboardProps) {
   // The user's primary niche slug, if any. Empty string falls through to
   // each consumer's existing default behavior.
@@ -469,6 +472,7 @@ export function Dashboard({
         onCollapsedChange={setSidebarCollapsed}
         user={user}
         isPremium={isPremium}
+        isAdmin={isAdmin}
         mobileOpen={mobileNavOpen}
         onMobileOpenChange={setMobileNavOpen}
       />

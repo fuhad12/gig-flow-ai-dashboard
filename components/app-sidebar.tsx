@@ -22,6 +22,7 @@ import {
   Crown,
   Briefcase,
   UserRound,
+  Shield,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -62,6 +63,8 @@ interface AppSidebarProps {
   onCollapsedChange: (collapsed: boolean) => void
   user: { id: string; email: string }
   isPremium?: boolean
+  /** When true, show a link to /admin (env allowlist). */
+  isAdmin?: boolean
   /**
    * Mobile drawer state. When provided, the sidebar also renders inside a
    * `Sheet` that the dashboard topbar can open via the hamburger button.
@@ -104,6 +107,7 @@ export function AppSidebar({
   onCollapsedChange,
   user,
   isPremium = false,
+  isAdmin = false,
   mobileOpen = false,
   onMobileOpenChange,
 }: AppSidebarProps) {
@@ -233,6 +237,33 @@ export function AppSidebar({
 
               return btn
             })}
+            {isAdmin && (
+              isCollapsed ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <a
+                      href="/admin"
+                      className="flex w-full items-center justify-center rounded-md px-2.5 py-2 text-muted-foreground hover:bg-sidebar-accent hover:text-emerald"
+                      onClick={() => onMobileOpenChange?.(false)}
+                    >
+                      <Shield className="size-4 shrink-0" />
+                    </a>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="bg-popover text-popover-foreground">
+                    Admin
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <a
+                  href="/admin"
+                  onClick={() => onMobileOpenChange?.(false)}
+                  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-emerald"
+                >
+                  <Shield className="size-4 shrink-0" />
+                  <span className="truncate">Admin</span>
+                </a>
+              )
+            )}
           </div>
         </div>
 
@@ -280,7 +311,9 @@ export function AppSidebar({
                 <span className="truncate text-xs font-medium text-sidebar-foreground">
                   {user.email}
                 </span>
-                <span className="text-[10px] text-muted-foreground">Signed in</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {isAdmin ? "Admin" : "Signed in"}
+                </span>
               </div>
               <Button
                 variant="ghost"
