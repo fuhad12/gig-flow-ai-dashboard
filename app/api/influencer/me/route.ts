@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { normalizeInfluencerEmail } from "@/lib/referral"
+import { resolveTier } from "@/lib/quota"
 import { getSiteUrl } from "@/lib/stripe"
 import { createSupabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
@@ -57,11 +58,23 @@ export async function GET() {
 
   const influencerId = influencer.id as string
 
-  const [{ count: referredCount }, { data: commissions }] = await Promise.all([
+  const [
+    { count: referredCount },
+    { data: referredProfiles },
+    { data: commissions },
+  ] = await Promise.all([
     admin
       .from("profiles")
       .select("id", { count: "exact", head: true })
       .eq("referred_by_influencer_id", influencerId),
+    admin
+      .from("profiles")
+      .select(
+        "id, email, created_at, subscription_tier, subscription_status, subscription_plan",
+      )
+      .eq("referred_by_influencer_id", influencerId)
+      .order("created_at", { ascending: false })
+      .limit(200),
     admin
       .from("referral_commissions")
       .select(
@@ -72,6 +85,7 @@ export async function GET() {
       .limit(100),
   ])
 
+  const referred = referredProfiles ?? []
   const rows = commissions ?? []
   const pendingCents = rows
     .filter((r) => r.status === "pending")
@@ -96,11 +110,25 @@ export async function GET() {
       referralUrl: `${site}/r/${influencer.code}`,
     },
     stats: {
-      referredSignups: referredCount ?? 0,
+      referredSignups: referredCount ?? referred.length,
       proConversions: convertedUserIds.size,
       pendingCents,
       paidCents,
     },
+    referredUsers: referred.map((r) => {
+      const status = (r.subscription_status as string | null) ?? null
+      const storedTier = (r.subscription_tier as string | null) ?? null
+      const tier = resolveTier(status, storedTier)
+      return {
+        id: r.id as string,
+        email: (r.email as string) ?? "",
+        createdAt: r.created_at as string,
+        tier,
+        billing: tier === "free" ? ("free" as const) : ("paid" as const),
+        subscriptionStatus: status,
+        subscriptionPlan: (r.subscription_plan as string | null) ?? null,
+      }
+    }),
     commissions: rows.map((r) => ({
       id: r.id as string,
       userId: r.user_id as string,

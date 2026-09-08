@@ -87,6 +87,8 @@ interface DashboardProps {
   needsNicheOnboarding: boolean
   /** Env allowlist — shows Admin nav link when true. */
   isAdmin?: boolean
+  /** Influencer partner — shows Partner nav link to /influencer. */
+  isInfluencer?: boolean
 }
 
 const SUPPORT_EMAIL =
@@ -148,6 +150,7 @@ export function Dashboard({
   skillTags,
   needsNicheOnboarding,
   isAdmin = false,
+  isInfluencer = false,
 }: DashboardProps) {
   // The user's primary niche slug, if any. Empty string falls through to
   // each consumer's existing default behavior.
@@ -473,6 +476,7 @@ export function Dashboard({
         user={user}
         isPremium={isPremium}
         isAdmin={isAdmin}
+        isInfluencer={isInfluencer}
         mobileOpen={mobileNavOpen}
         onMobileOpenChange={setMobileNavOpen}
       />

@@ -222,7 +222,8 @@ export function AdminInfluencersView() {
             Create influencer
           </CardTitle>
           <CardDescription>
-            They sign in with this email and open /influencer. Share the referral
+            They sign in with this email. A Partner link appears in their
+            sidebar (or open /influencer). Share the referral
             link — users never type a code.
           </CardDescription>
         </CardHeader>

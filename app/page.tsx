@@ -6,6 +6,7 @@ import { SetupRequired } from "@/components/setup-required"
 import { createSupabaseServer } from "@/lib/supabase/server"
 import { getQuotaStatus } from "@/lib/quota"
 import { isAdminEmail } from "@/lib/admin"
+import { isInfluencerEmail } from "@/lib/referral"
 
 export const dynamic = "force-dynamic"
 
@@ -56,6 +57,8 @@ export default async function Home({
   const needsNicheOnboarding =
     quota.onboardedAt === null && quota.selectedNiches.length === 0
 
+  const isInfluencer = await isInfluencerEmail(user.email)
+
   return (
     <Dashboard
       user={{ id: user.id, email: user.email ?? "" }}
@@ -71,6 +74,7 @@ export default async function Home({
       skillTags={quota.skillTags}
       needsNicheOnboarding={needsNicheOnboarding}
       isAdmin={isAdminEmail(user.email)}
+      isInfluencer={isInfluencer}
     />
   )
 }

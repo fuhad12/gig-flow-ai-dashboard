@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Influencer partner dashboard — referral link, stats, commissions.
+ * Influencer partner dashboard — referral link, referred users, commissions.
  */
 
 import { useCallback, useEffect, useState } from "react"
@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { InfluencerLeaderboard } from "@/components/influencer-leaderboard"
 
 interface MeResponse {
   influencer?: {
@@ -48,6 +49,15 @@ interface MeResponse {
     pendingCents: number
     paidCents: number
   }
+  referredUsers?: Array<{
+    id: string
+    email: string
+    createdAt: string
+    tier: string
+    billing: "free" | "paid"
+    subscriptionStatus: string | null
+    subscriptionPlan: string | null
+  }>
   commissions?: Array<{
     id: string
     userId: string
@@ -149,7 +159,7 @@ export function InfluencerDashboardView() {
     )
   }
 
-  const { influencer, stats, commissions = [] } = data
+  const { influencer, stats, referredUsers = [], commissions = [] } = data
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
@@ -214,6 +224,68 @@ export function InfluencerDashboardView() {
         />
         <StatCard label="Paid out" value={formatMoney(stats?.paidCents ?? 0)} />
       </div>
+
+      <InfluencerLeaderboard />
+
+      <Card className="border-border bg-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Referred users</CardTitle>
+          <CardDescription>
+            People who signed up through your link · free vs paid
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Billing</TableHead>
+                  <TableHead>Tier</TableHead>
+                  <TableHead>Signed up</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {referredUsers.length === 0 && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={4}
+                      className="h-20 text-center text-sm text-muted-foreground"
+                    >
+                      No referrals yet — share your link to get started
+                    </TableCell>
+                  </TableRow>
+                )}
+                {referredUsers.map((u) => (
+                  <TableRow key={u.id}>
+                    <TableCell className="max-w-[240px] truncate font-medium">
+                      {u.email || u.id.slice(0, 8)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={
+                          u.billing === "paid"
+                            ? "capitalize border-emerald/40 bg-emerald/10 text-emerald"
+                            : "capitalize border-border text-muted-foreground"
+                        }
+                      >
+                        {u.billing}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="capitalize text-muted-foreground">
+                      {u.tier}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {formatDate(u.createdAt)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="border-border bg-card">
         <CardHeader className="pb-3">

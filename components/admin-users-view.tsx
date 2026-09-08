@@ -72,6 +72,11 @@ function tierBadgeClass(tier: string): string {
   return "border-border text-muted-foreground"
 }
 
+function billingBadgeClass(billing: string): string {
+  if (billing === "paid") return "border-emerald/40 bg-emerald/10 text-emerald"
+  return "border-border text-muted-foreground"
+}
+
 export function AdminUsersView({
   adminEmail,
   embedded = false,
@@ -156,7 +161,8 @@ export function AdminUsersView({
                 Users
               </CardTitle>
               <CardDescription>
-                {total} account{total === 1 ? "" : "s"}
+                {total} account{total === 1 ? "" : "s"} · free/paid · referral
+                attribution
               </CardDescription>
             </div>
             <form
@@ -191,9 +197,11 @@ export function AdminUsersView({
               <TableHeader>
                 <TableRow>
                   <TableHead>Email</TableHead>
+                  <TableHead>Billing</TableHead>
                   <TableHead>Tier</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Plan</TableHead>
+                  <TableHead>Referred by</TableHead>
                   <TableHead>Credits (mo)</TableHead>
                   <TableHead>Top-ups</TableHead>
                   <TableHead>Signed up</TableHead>
@@ -202,7 +210,7 @@ export function AdminUsersView({
               <TableBody>
                 {loading && (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center">
+                    <TableCell colSpan={9} className="h-24 text-center">
                       <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
                         <Loader2 className="size-4 animate-spin text-emerald" />
                         Loading users…
@@ -213,7 +221,7 @@ export function AdminUsersView({
                 {!loading && users.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={7}
+                      colSpan={9}
                       className="h-24 text-center text-sm text-muted-foreground"
                     >
                       No users found
@@ -229,6 +237,14 @@ export function AdminUsersView({
                       <TableCell>
                         <Badge
                           variant="outline"
+                          className={`capitalize ${billingBadgeClass(u.billing)}`}
+                        >
+                          {u.billing}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
                           className={`capitalize ${tierBadgeClass(u.tier)}`}
                         >
                           {u.tier}
@@ -239,6 +255,20 @@ export function AdminUsersView({
                       </TableCell>
                       <TableCell className="text-muted-foreground capitalize">
                         {u.subscriptionPlan ?? "—"}
+                      </TableCell>
+                      <TableCell className="max-w-[180px]">
+                        {u.referredBy ? (
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {u.referredBy.name}
+                            </p>
+                            <p className="truncate text-[11px] text-muted-foreground">
+                              /r/{u.referredBy.code}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="tabular-nums">
                         {u.creditsUsed}/{u.creditLimit}

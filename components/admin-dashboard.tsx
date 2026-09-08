@@ -9,6 +9,7 @@ import { Shield } from "lucide-react"
 
 import { AdminUsersView } from "@/components/admin-users-view"
 import { AdminInfluencersView } from "@/components/admin-influencers-view"
+import { InfluencerLeaderboard } from "@/components/influencer-leaderboard"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
@@ -38,12 +39,16 @@ export function AdminDashboard({ adminEmail }: AdminDashboardProps) {
         <TabsList>
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="influencers">Influencers</TabsTrigger>
+          <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
         </TabsList>
         <TabsContent value="users" className="mt-4">
           <AdminUsersView adminEmail={adminEmail} embedded />
         </TabsContent>
         <TabsContent value="influencers" className="mt-4">
           <AdminInfluencersView />
+        </TabsContent>
+        <TabsContent value="leaderboard" className="mt-4">
+          <InfluencerLeaderboard />
         </TabsContent>
       </Tabs>
     </div>

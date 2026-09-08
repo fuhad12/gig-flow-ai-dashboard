@@ -22,6 +22,23 @@ export function normalizeInfluencerEmail(email: string): string {
   return email.trim().toLowerCase()
 }
 
+/** True when this email has an influencers row (partner dashboard access). */
+export async function isInfluencerEmail(
+  email: string | null | undefined,
+): Promise<boolean> {
+  if (!email) return false
+  const admin = getSupabaseAdmin()
+  if (!admin) return false
+  const normalized = normalizeInfluencerEmail(email)
+  const { data } = await admin
+    .from("influencers")
+    .select("id, email")
+    .ilike("email", normalized)
+    .maybeSingle()
+  if (!data) return false
+  return normalizeInfluencerEmail(data.email as string) === normalized
+}
+
 export interface InfluencerRow {
   id: string
   code: string

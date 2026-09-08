@@ -23,6 +23,7 @@ import {
   Briefcase,
   UserRound,
   Shield,
+  Megaphone,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -65,6 +66,8 @@ interface AppSidebarProps {
   isPremium?: boolean
   /** When true, show a link to /admin (env allowlist). */
   isAdmin?: boolean
+  /** When true, show a link to /influencer (partner account). */
+  isInfluencer?: boolean
   /**
    * Mobile drawer state. When provided, the sidebar also renders inside a
    * `Sheet` that the dashboard topbar can open via the hamburger button.
@@ -108,6 +111,7 @@ export function AppSidebar({
   user,
   isPremium = false,
   isAdmin = false,
+  isInfluencer = false,
   mobileOpen = false,
   onMobileOpenChange,
 }: AppSidebarProps) {
@@ -237,6 +241,33 @@ export function AppSidebar({
 
               return btn
             })}
+            {isInfluencer && (
+              isCollapsed ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <a
+                      href="/influencer"
+                      className="flex w-full items-center justify-center rounded-md px-2.5 py-2 text-muted-foreground hover:bg-sidebar-accent hover:text-emerald"
+                      onClick={() => onMobileOpenChange?.(false)}
+                    >
+                      <Megaphone className="size-4 shrink-0" />
+                    </a>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="bg-popover text-popover-foreground">
+                    Partner
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <a
+                  href="/influencer"
+                  onClick={() => onMobileOpenChange?.(false)}
+                  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-emerald"
+                >
+                  <Megaphone className="size-4 shrink-0" />
+                  <span className="truncate">Partner</span>
+                </a>
+              )
+            )}
             {isAdmin && (
               isCollapsed ? (
                 <Tooltip>
@@ -312,7 +343,11 @@ export function AppSidebar({
                   {user.email}
                 </span>
                 <span className="text-[10px] text-muted-foreground">
-                  {isAdmin ? "Admin" : "Signed in"}
+                  {isAdmin
+                    ? "Admin"
+                    : isInfluencer
+                      ? "Partner"
+                      : "Signed in"}
                 </span>
               </div>
               <Button

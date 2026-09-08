@@ -6,6 +6,8 @@ export interface AdminUserRow {
   email: string
   createdAt: string
   tier: Tier
+  /** Derived: free vs any paid tier (pro / agency). */
+  billing: "free" | "paid"
   subscriptionStatus: string | null
   subscriptionPlan: string | null
   currentPeriodEnd: string | null
@@ -13,4 +15,10 @@ export interface AdminUserRow {
   creditsUsed: number
   creditLimit: number
   topupBalance: number
+  /** First-touch influencer attribution, if any. */
+  referredBy: {
+    id: string
+    name: string
+    code: string
+  } | null
 }
