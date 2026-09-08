@@ -68,7 +68,18 @@ export async function GET(
   // user has run their monthly AI credit pool dry we refuse those
   // scrapes and serve whatever's cached. Explicit refresh requests
   // surface as a 402 so the client can pop the paywall.
-  const quota = await getQuotaStatus(user.id)
+  let quota
+  try {
+    quota = await getQuotaStatus(user.id)
+  } catch (err) {
+    console.error("[trends] getQuotaStatus failed:", err)
+    return NextResponse.json(
+      {
+        error: "Could not load your credit balance. Try again in a moment.",
+      },
+      { status: 503 },
+    )
+  }
   const canScrape = isPinned && quota.allowed
 
   if (refreshRequested && !canScrape) {
@@ -94,11 +105,9 @@ export async function GET(
   }
 
   try {
+    // Unpinned / out-of-credits: cache-only, never wait on Fiverr scrape.
     const snapshot = await getNicheSnapshot(slug, {
-      // Explicit refresh only allowed on pinned + in-budget niches.
       refresh: refreshRequested && canScrape,
-      // Block ALL scrapes (cache miss, stale auto-refresh) for niches
-      // the user hasn't pinned or when they're out of credits.
       readOnly: !canScrape,
     })
 
@@ -143,6 +152,21 @@ export async function GET(
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to load niche trends"
+    console.error("[trends] snapshot failed:", message)
+    // Prefer a soft empty state over a hard error when the user simply
+    // hasn't pinned anything yet — same UX as an empty cache.
+    if (!isPinned) {
+      return NextResponse.json(
+        {
+          niches: NICHES,
+          snapshot: null,
+          pinned: false,
+          canRefresh: false,
+          emptyReason: "not_pinned" as const,
+        },
+        { status: 200 },
+      )
+    }
     return NextResponse.json({ error: message }, { status: 502 })
   }
 }

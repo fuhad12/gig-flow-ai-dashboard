@@ -127,6 +127,8 @@ export function TrendsView({
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Niches fetch finished (success or fail) — trends wait on this. */
+  const [nichesReady, setNichesReady] = useState(false)
 
   // Pull the user's selection once on mount. If they have any pinned, seed
   // the dropdown with their first (primary) niche; otherwise we keep the
@@ -136,13 +138,17 @@ export function TrendsView({
     fetch("/api/profile/niches")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (cancelled || !data) return
-        const selected = (data.selectedNiches as string[] | undefined) ?? []
+        if (cancelled) return
+        const selected = (data?.selectedNiches as string[] | undefined) ?? []
         setPinnedNiches(selected)
         if (selected.length > 0) setSelectedSlug(selected[0])
+        setNichesReady(true)
       })
       .catch(() => {
-        if (!cancelled) setPinnedNiches([])
+        if (!cancelled) {
+          setPinnedNiches([])
+          setNichesReady(true)
+        }
       })
     return () => {
       cancelled = true
@@ -162,7 +168,7 @@ export function TrendsView({
   const hasPinned = !!pinnedNiches && pinnedNiches.length > 0
 
   const load = useCallback(
-    async (slug: string, refresh = false) => {
+    async (slug: string, refresh = false, signal?: AbortSignal) => {
       if (refresh) setRefreshing(true)
       else setLoading(true)
       setError(null)
@@ -170,13 +176,10 @@ export function TrendsView({
       // the wrong card during a niche switch.
       setEmptyReason(null)
 
-      try {
-        const url = `/api/trends/${slug}${refresh ? "?refresh=true" : ""}`
-        const res = await fetch(url)
+      const attempt = async () => {
+        const url = `/api/trends/${encodeURIComponent(slug)}${refresh ? "?refresh=true" : ""}`
+        const res = await fetch(url, { signal, cache: "no-store" })
         if (res.status === 402) {
-          // User is out of monthly AI credits. Pop the paywall and
-          // surface the server's message inline so the page still
-          // explains why the action was blocked.
           onQuotaExceeded?.()
           const data = (await res.json().catch(() => null)) as
             | { error?: string }
@@ -191,24 +194,57 @@ export function TrendsView({
             data?.error ?? `Request failed with status ${res.status}`,
           )
         }
-        const data = (await res.json()) as TrendsResponse
+        return (await res.json()) as TrendsResponse
+      }
+
+      try {
+        let data: TrendsResponse
+        try {
+          data = await attempt()
+        } catch (err) {
+          // One retry on transient network / deploy blips.
+          const msg = err instanceof Error ? err.message : String(err)
+          if (
+            signal?.aborted ||
+            (!/Failed to fetch|NetworkError|Load failed|fetch/i.test(msg) &&
+              !(err instanceof TypeError))
+          ) {
+            throw err
+          }
+          await new Promise((r) => setTimeout(r, 600))
+          if (signal?.aborted) throw err
+          data = await attempt()
+        }
+        if (signal?.aborted) return
         setSnapshot(data.snapshot)
         setPinned(Boolean(data.pinned))
         setCanRefresh(Boolean(data.canRefresh))
         setEmptyReason(data.emptyReason ?? null)
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong")
+        if (signal?.aborted) return
+        const raw = err instanceof Error ? err.message : "Something went wrong"
+        const friendly =
+          /Failed to fetch|NetworkError|Load failed/i.test(raw) ||
+          err instanceof TypeError
+            ? "Couldn’t reach the trends server. Check your connection, pin a niche in Settings, then tap Refresh."
+            : raw
+        setError(friendly)
       } finally {
-        setLoading(false)
-        setRefreshing(false)
+        if (!signal?.aborted) {
+          setLoading(false)
+          setRefreshing(false)
+        }
       }
     },
     [onQuotaExceeded],
   )
 
   useEffect(() => {
-    load(selectedSlug)
-  }, [selectedSlug, load])
+    if (!nichesReady) return
+    const ac = new AbortController()
+    void load(selectedSlug, false, ac.signal)
+    return () => ac.abort()
+  }, [selectedSlug, load, nichesReady])
 
   return (
     <ScrollArea className="h-full">
@@ -240,14 +276,15 @@ export function TrendsView({
             <Button
               size="sm"
               variant="outline"
-              onClick={() => load(selectedSlug, true)}
+              onClick={() => void load(selectedSlug, true)}
               // Disable while loading OR when the user can't refresh this
               // niche (not pinned, or out of credits) so we don't fire a
               // 402 / 403 from a click that the banner already explains.
-              disabled={loading || refreshing || !canRefresh}
+              // Allow retry when errored even if !canRefresh (cache read).
+              disabled={loading || refreshing || (!canRefresh && !error)}
               className="gap-1.5"
               title={
-                !canRefresh
+                !canRefresh && !error
                   ? pinned
                     ? "Out of AI credits — buy a top-up or upgrade to refresh"
                     : "Pin this niche in Settings to enable refresh"
@@ -325,11 +362,33 @@ export function TrendsView({
 
         {/* Error */}
         {error && (
-          <div className="mb-6 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
-            <AlertCircle className="mt-0.5 size-4 shrink-0" />
-            <div>
-              <div className="font-medium">Could not load trends</div>
-              <div className="text-xs text-danger/80">{error}</div>
+          <div className="mb-6 flex flex-col gap-3 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <div className="font-medium">Could not load trends</div>
+                <div className="text-xs text-danger/80">{error}</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-danger/40 text-danger hover:bg-danger/10"
+                onClick={() => void load(selectedSlug, false)}
+                disabled={loading || refreshing}
+              >
+                Try again
+              </Button>
+              {onOpenSettings && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={onOpenSettings}
+                >
+                  Open Settings
+                </Button>
+              )}
             </div>
           </div>
         )}
