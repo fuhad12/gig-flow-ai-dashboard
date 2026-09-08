@@ -113,22 +113,41 @@ export const FIVERR_PROFILE_RULES = [
 
 /**
  * Upwork freelancer profile — title + overview + skills that win invites.
+ * Limits (Upwork Help / freelancer resources):
+ *   - Title: 70 characters
+ *   - Overview: up to 5,000 characters; only ~200–250 show before “Read more”
+ *   - Skills: up to 20; prefer concrete searchable labels
+ * Target overview length: 2,000–3,500 characters (scannable, not a wall of 5k).
  */
 export const UPWORK_PROFILE_RULES = [
   "MISSION: Make the Upwork profile win profile views → invites → interviews.",
   "",
-  "TITLE (headline):",
-  "- Specialization + outcome. Example: 'Next.js SaaS developer | MVPs that ship in 2 weeks'.",
-  "- Avoid laundry-list pipes of every skill.",
+  "TITLE (headline) — hard limit 70 characters:",
+  "- Specialization + outcome. Example: 'Next.js SaaS Developer | MVPs in 2 Weeks'.",
+  "- Keyword-rich; avoid laundry-list pipes of every skill. Use nearly all 70 chars.",
   "",
-  "OVERVIEW:",
-  "- Lead with who you help and a concrete result (metric if provided).",
-  "- 3 short sections max: specialty, how you work / process, proof + soft CTA.",
-  "- Write for clients scanning on mobile. Peer tone — not a resume dump.",
+  "OVERVIEW — Upwork allows 5,000 characters; TARGET 2,000–3,500 characters:",
+  "- First 200–250 characters are the ONLY lines clients see in search before Read more — that hook must sell the specialty + outcome.",
+  "- Structure (plain text, short paragraphs; optional short bullets after the hook):",
+  "  1) Hook (who you help + concrete result)",
+  "  2) What you deliver / niches & stack clients search",
+  "  3) How you work (process, communication, timelines)",
+  "  4) Proof (only metrics/clients present in scraped text — never invent)",
+  "  5) Soft CTA (invite to message with the brief / timeline)",
+  "- Peer tone for mobile skim. Not a resume dump. No contact info (email/phone/Skype).",
+  "",
+  "HOURLY RATE:",
+  "- Suggest a realistic profile hourly rate (USD) for THIS specialty and seniority signals in the scrape.",
+  "- Undercutting ($5–$15 for skilled tech/creative) reads unprofessional — push toward market positioning, not race-to-bottom.",
+  "- Rate is a positioning signal; note they can negotiate per job.",
   "",
   "SKILLS:",
-  "- Match Upwork skill taxonomy style: concrete tools and services clients search.",
-  "- Prioritize skills that match the offer; drop soft skills unless they are differentiators.",
+  "- Match Upwork skill style: concrete tools and services clients search (up to ~10–15 suggestions).",
+  "- Prioritize skills that match the offer; drop soft skills unless differentiators.",
+  "",
+  "ACTION PLAN:",
+  "- Numbered, ordered steps the seller does on Upwork today (change title → paste overview → set rate → skills → proof).",
+  "- Each step: short title + one concrete detail (where to click / what to paste).",
   "",
   `- Ban fluff: ${BANNED_FLUFF}.`,
   "Never invent Job Success %, earnings, or client names not in the pasted text.",

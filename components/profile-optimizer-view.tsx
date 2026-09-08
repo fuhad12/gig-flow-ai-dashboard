@@ -365,7 +365,9 @@ function OptimizationResult({ result }: { result: ProfileOptimization }) {
                 : "Profile headline"}
             </CardTitle>
             <CardDescription className="text-xs">
-              Paste into your live profile
+              {result.platform === "upwork"
+                ? `${result.headline.length}/70 characters · paste into your live profile`
+                : "Paste into your live profile"}
             </CardDescription>
           </div>
           <CopyButton text={result.headline} />
@@ -377,6 +379,34 @@ function OptimizationResult({ result }: { result: ProfileOptimization }) {
         </CardContent>
       </Card>
 
+      {result.suggestedRateUsd != null && (
+        <Card className="border-emerald/30 bg-emerald/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-emerald">
+              {result.suggestedRateLabel}
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Positioning signal — adjust per job if needed
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <p className="text-2xl font-semibold tabular-nums text-foreground">
+              ${result.suggestedRateUsd}
+              {result.platform === "upwork" ? (
+                <span className="text-sm font-normal text-muted-foreground">
+                  /hr
+                </span>
+              ) : null}
+            </p>
+            {result.suggestedRateNote && (
+              <p className="text-sm text-muted-foreground">
+                {result.suggestedRateNote}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="border-border bg-card">
         <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2">
           <div>
@@ -384,12 +414,20 @@ function OptimizationResult({ result }: { result: ProfileOptimization }) {
               {result.platform === "fiverr" ? "Description" : "Overview"}
             </CardTitle>
             <CardDescription className="text-xs">
-              {result.overview.split(/\s+/).filter(Boolean).length} words
+              {result.platform === "upwork"
+                ? `${result.overview.length.toLocaleString()} characters · target 2,000–3,500 (max 5,000)`
+                : `${result.overview.split(/\s+/).filter(Boolean).length} words`}
             </CardDescription>
           </div>
           <CopyButton text={result.overview} />
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          {result.platform === "upwork" && (
+            <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              Clients only see the first ~250 characters in search before “Read
+              more” — that opening must hook them.
+            </p>
+          )}
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
             {result.overview}
           </p>
@@ -444,15 +482,36 @@ function OptimizationResult({ result }: { result: ProfileOptimization }) {
       <Card className="border-amber-500/30 bg-amber-500/5">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm text-amber-700 dark:text-amber-300">
-            Edit checklist
+            Action plan
           </CardTitle>
+          <CardDescription className="text-xs">
+            Do these in order on your live {result.platform === "upwork" ? "Upwork" : "Fiverr"} profile
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <ul className="space-y-1.5 pl-4 text-sm text-muted-foreground [&>li]:list-disc">
-            {result.editChecklist.map((c, i) => (
-              <li key={i}>{c}</li>
+          <ol className="space-y-3">
+            {(result.actionPlan?.length
+              ? result.actionPlan
+              : (result.editChecklist ?? []).map((line) => ({
+                  title: line,
+                  detail: "",
+                }))
+            ).map((step, i) => (
+              <li key={i} className="flex gap-3">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-xs font-semibold tabular-nums text-amber-700 dark:text-amber-300">
+                  {i + 1}
+                </span>
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-sm font-medium text-foreground">
+                    {step.title}
+                  </p>
+                  {step.detail ? (
+                    <p className="text-sm text-muted-foreground">{step.detail}</p>
+                  ) : null}
+                </div>
+              </li>
             ))}
-          </ul>
+          </ol>
         </CardContent>
       </Card>
     </div>

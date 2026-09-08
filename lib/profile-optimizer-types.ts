@@ -31,9 +31,23 @@ export interface ProfileOptimization {
   overview: string
   /** Suggested skills / specialties (platform-appropriate labels). */
   skills: string[]
+  /**
+   * Suggested profile rate in USD.
+   * Upwork: hourly rate. Fiverr: suggested starting package price (or null).
+   */
+  suggestedRateUsd: number | null
+  /** Short label for the rate (e.g. "Suggested hourly rate"). */
+  suggestedRateLabel: string
+  /** One-line why this rate fits (no invented credentials). */
+  suggestedRateNote: string
   /** Why this rewrite should win more clients. */
   winAngles: string[]
-  /** Concrete edits to make on the live profile before publishing. */
+  /** Ordered steps to apply on the live profile. */
+  actionPlan: Array<{
+    title: string
+    detail: string
+  }>
+  /** @deprecated Prefer actionPlan — kept for older clients. */
   editChecklist: string[]
   /** Short critique of the original profile. */
   critique: string[]
