@@ -49,6 +49,7 @@ import type {
   UpworkProposal,
 } from "@/lib/proposal-types"
 import { buildSkillsFromTags } from "@/lib/profile-optimizer-types"
+import { VisibilityPanel } from "@/components/visibility-panel"
 
 export { buildSkillsFromTags }
 
@@ -548,6 +549,15 @@ function ProposalResult({ result }: { result: UpworkProposal }) {
           )}
         </div>
       )}
+
+      <VisibilityPanel
+        title="Win the connect — and AI shortlists"
+        description="AEO: answer screening questions. GEO: look recommendable when clients ask AI who to hire."
+        aiRecommendScore={result.aiRecommendScore}
+        aiRecommendNote={result.aiRecommendNote}
+        faqs={result.screeningAnswers}
+        faqTitle="Screening answers (paste-ready)"
+      />
 
       <Card className="border-border bg-card">
         <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2">

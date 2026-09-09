@@ -42,6 +42,8 @@ import type {
   ProfileVerdict,
 } from "@/lib/profile-optimizer-types"
 import { detectProfilePlatform } from "@/lib/profile-optimizer-types"
+import { VisibilityPanel } from "@/components/visibility-panel"
+import { DEFAULT_PROFILE_CHECKLIST } from "@/lib/visibility-types"
 
 interface ProfileOptimizerViewProps {
   onCreditStart?: () => boolean
@@ -505,6 +507,18 @@ function OptimizationResult({ result }: { result: ProfileOptimization }) {
           </ul>
         </CardContent>
       </Card>
+
+      <VisibilityPanel
+        title="Be findable — and recommendable"
+        description="Snippet-first overview (AEO) + citable proof (GEO) + consistent niche (AIO)."
+        proofQuotes={result.proofQuotes}
+        answerReadinessNotes={result.geoTips}
+        checklist={
+          result.visibilityChecklist?.length
+            ? result.visibilityChecklist
+            : DEFAULT_PROFILE_CHECKLIST
+        }
+      />
 
       <Card className="border-amber-500/30 bg-amber-500/5">
         <CardHeader className="pb-2">

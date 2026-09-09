@@ -7,6 +7,7 @@ import { z } from "zod"
 
 import {
   FIVERR_PROFILE_RULES,
+  FREELANCER_VISIBILITY_RULES,
   UPWORK_PROFILE_RULES,
 } from "@/lib/llm/conversion-playbook"
 import { getLlmProvider } from "@/lib/llm/provider"
@@ -27,10 +28,22 @@ import {
   rateFamilyLabel,
   type RateFamily,
 } from "@/lib/niche-rates"
+import {
+  DEFAULT_PROFILE_CHECKLIST,
+  cleanChecklist,
+  cleanProofQuotes,
+} from "@/lib/visibility-types"
 
 const ActionStepSchema = z.object({
   title: z.string().min(4).max(120),
   detail: z.string().min(12).max(500),
+})
+
+const VisibilityItemSchema = z.object({
+  id: z.string().min(2).max(48),
+  layer: z.enum(["seo", "aeo", "geo", "aio"]),
+  title: z.string().min(4).max(100),
+  detail: z.string().min(12).max(320),
 })
 
 const OptimizationSchema = z.object({
@@ -48,6 +61,9 @@ const OptimizationSchema = z.object({
   /** Legacy flat checklist — mapped into actionPlan if needed. */
   editChecklist: z.array(z.string()).default([]),
   critique: z.array(z.string()).default([]),
+  proofQuotes: z.array(z.string()).default([]),
+  geoTips: z.array(z.string()).default([]),
+  visibilityChecklist: z.array(VisibilityItemSchema).default([]),
 })
 
 const DEFAULT_WIN = [
@@ -327,6 +343,14 @@ function normalize(
       (s, i) => `${i + 1}. ${s.title}: ${s.detail}`,
     ),
     critique: padList(cleanStrings(data.critique), DEFAULT_CRITIQUE, 2, 6),
+    proofQuotes: cleanProofQuotes(data.proofQuotes, 4),
+    geoTips: cleanStrings(data.geoTips, 12).slice(0, 4),
+    visibilityChecklist: cleanChecklist(
+      data.visibilityChecklist,
+      DEFAULT_PROFILE_CHECKLIST,
+      4,
+      7,
+    ),
   }
 }
 
@@ -382,6 +406,8 @@ export async function optimizeSellerProfile(
     `PLATFORM: ${input.platform.toUpperCase()}`,
     platformRules,
     "",
+    FREELANCER_VISIBILITY_RULES,
+    "",
     platformOverviewInstructions(input.platform),
     "",
     `DETECTED NICHE RATE FAMILY: ${rateFamilyLabel(rateFamily)} (${rateFamily}).`,
@@ -404,6 +430,9 @@ export async function optimizeSellerProfile(
     "  Skip video-intro steps unless the scrape already leans on video.",
     "suggestedRateNote: one sentence explaining the rate for THIS stage AND niche without inventing credentials.",
     "winAngles: 2-5 why the rewrite helps win clients + Uma matching (niche density, snippet, skills) — not premium pricing for early accounts.",
+    "proofQuotes: 1-3 short citable lines grounded ONLY in scrape facts (or honest capability claims if thin proof). Never invent metrics.",
+    "geoTips: 2-4 GEO/AIO tips (LinkedIn niche post, case-study framing, consistent bio elsewhere).",
+    "visibilityChecklist: 4-7 items with layer seo|aeo|geo|aio.",
     "GROUNDING (critical):",
     "- The scraped block is the ONLY source of truth.",
     "- NEVER invent clients, companies, countries, tools, earnings, or ratings.",
@@ -439,6 +468,9 @@ export async function optimizeSellerProfile(
       "winAngles",
       "actionPlan",
       "critique",
+      "proofQuotes",
+      "geoTips",
+      "visibilityChecklist",
     ],
     properties: {
       score: {
@@ -509,6 +541,36 @@ export async function optimizeSellerProfile(
         items: { type: "string" },
         minItems: 2,
         maxItems: 6,
+      },
+      proofQuotes: {
+        type: "array",
+        items: { type: "string" },
+        maxItems: 4,
+        description: "Citable proof lines grounded in scrape only.",
+      },
+      geoTips: {
+        type: "array",
+        items: { type: "string" },
+        maxItems: 4,
+        description: "GEO/AIO tips outside the marketplace profile.",
+      },
+      visibilityChecklist: {
+        type: "array",
+        maxItems: 7,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["id", "layer", "title", "detail"],
+          properties: {
+            id: { type: "string" },
+            layer: {
+              type: "string",
+              enum: ["seo", "aeo", "geo", "aio"],
+            },
+            title: { type: "string" },
+            detail: { type: "string" },
+          },
+        },
       },
     },
   }

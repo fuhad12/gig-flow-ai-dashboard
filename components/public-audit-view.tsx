@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button"
 import { AuditPanel } from "@/components/audit-panel"
 import { GigHealthGauge } from "@/components/gig-health-gauge"
 import { OptimizationPanel } from "@/components/optimization-panel"
+import { VisibilityPanel } from "@/components/visibility-panel"
 import type { GigAnalysis, ScrapedGig } from "@/lib/analysis-types"
 
 export interface PublicAuditViewProps {
@@ -195,6 +196,23 @@ export function PublicAuditView({
             </div>
           </div>
         </div>
+
+        {(analysis.answerReadinessScore != null ||
+          analysis.geoCiteScore != null ||
+          (analysis.visibilityChecklist?.length ?? 0) > 0 ||
+          (analysis.suggestedFaqs?.length ?? 0) > 0) && (
+          <div className="border-b border-border px-6 py-4">
+            <VisibilityPanel
+              answerReadinessScore={analysis.answerReadinessScore}
+              geoCiteScore={analysis.geoCiteScore}
+              answerReadinessNotes={analysis.answerReadinessNotes}
+              proofQuotes={analysis.proofQuotes}
+              faqs={analysis.suggestedFaqs}
+              checklist={analysis.visibilityChecklist}
+              faqTitle="Suggested gig FAQs"
+            />
+          </div>
+        )}
 
         {/* Split-screen panels — same as the private auditor.
             Each panel renders at natural height; the page scrolls. The

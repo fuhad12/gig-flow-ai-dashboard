@@ -5,6 +5,7 @@
 
 import type { RateFamily } from "@/lib/niche-rates"
 import { rateBandForNicheStage } from "@/lib/niche-rates"
+import type { VisibilityChecklistItem } from "@/lib/visibility-types"
 
 export type { RateFamily } from "@/lib/niche-rates"
 
@@ -83,6 +84,15 @@ export interface ProfileOptimization {
   editChecklist: string[]
   /** Short critique of the original profile. */
   critique: string[]
+  /**
+   * GEO: short lines AI / clients can quote — grounded in scrape only.
+   * Optional for older cached rows.
+   */
+  proofQuotes?: string[]
+  /** GEO/AIO tips beyond the main action plan. */
+  geoTips?: string[]
+  /** SEO → AEO → GEO → AIO weekly checklist. */
+  visibilityChecklist?: VisibilityChecklistItem[]
   /** Optional scraped snapshot shown in the UI. */
   scraped?: {
     displayName: string

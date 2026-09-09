@@ -54,6 +54,14 @@ export interface GigGeneration {
   thumbnailIdeas: string[]
   /** A single ready-to-paste prompt for AI image generators. */
   gigImagePrompt: string
+  /**
+   * Questions buyers ask ChatGPT / Perplexity about this niche —
+   * angles the seller can own in FAQs, LinkedIn, or portfolio.
+   * Optional for older cached generations.
+   */
+  buyerAiQuestions?: string[]
+  /** SEO → AEO → GEO actions after publishing the gig. */
+  visibilityActions?: string[]
 }
 
 export interface GenerateRequest {

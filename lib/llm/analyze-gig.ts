@@ -9,11 +9,20 @@ import { z } from "zod"
 
 import { getAllCachedSnapshots } from "@/lib/trends"
 import { renderTrendsContext } from "@/lib/openai"
-import { FIVERR_WINNING_RULES } from "@/lib/llm/conversion-playbook"
+import {
+  FIVERR_WINNING_RULES,
+  FREELANCER_VISIBILITY_RULES,
+} from "@/lib/llm/conversion-playbook"
 import { getLlmProvider } from "@/lib/llm/provider"
 import { callWithTruncationRetry, safeJsonParse } from "@/lib/llm/truncation"
 import { FIVERR, softTruncate } from "@/lib/fiverr-limits"
 import type { GigAnalysis, ScrapedGig } from "@/lib/analysis-types"
+import {
+  DEFAULT_GIG_CHECKLIST,
+  cleanChecklist,
+  cleanProofQuotes,
+  cleanQaPairs,
+} from "@/lib/visibility-types"
 
 // ---------- Zod schemas ----------
 
@@ -24,6 +33,18 @@ const ThumbnailAnalysisSchema = z.object({
   ctrPotential: z.enum(["Low", "Medium", "High"]),
   critiques: z.array(z.string()).min(1),
   improvedConcept: z.string().min(1),
+})
+
+const VisibilityItemSchema = z.object({
+  id: z.string().min(2).max(48),
+  layer: z.enum(["seo", "aeo", "geo", "aio"]),
+  title: z.string().min(4).max(100),
+  detail: z.string().min(12).max(320),
+})
+
+const FaqSchema = z.object({
+  question: z.string().min(8).max(200),
+  answer: z.string().min(12).max(600),
 })
 
 export const AnalysisSchema = z.object({
@@ -39,6 +60,12 @@ export const AnalysisSchema = z.object({
     .array(z.string().max(FIVERR.tag.max))
     .length(FIVERR.tag.count),
   thumbnail: ThumbnailAnalysisSchema.nullable(),
+  answerReadinessScore: z.number().min(0).max(100).default(50),
+  answerReadinessNotes: z.array(z.string()).default([]),
+  suggestedFaqs: z.array(FaqSchema).default([]),
+  geoCiteScore: z.number().min(0).max(100).default(50),
+  proofQuotes: z.array(z.string()).default([]),
+  visibilityChecklist: z.array(VisibilityItemSchema).default([]),
 })
 
 // ---------- OpenAI strict structured-output JSON Schema mirror ----------
@@ -64,6 +91,28 @@ const thumbnailJsonSchema = {
   ],
 } as const
 
+const visibilityItemJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    id: { type: "string" },
+    layer: { type: "string", enum: ["seo", "aeo", "geo", "aio"] },
+    title: { type: "string" },
+    detail: { type: "string" },
+  },
+  required: ["id", "layer", "title", "detail"],
+} as const
+
+const faqJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    question: { type: "string" },
+    answer: { type: "string" },
+  },
+  required: ["question", "answer"],
+} as const
+
 const analysisJsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -83,6 +132,12 @@ const analysisJsonSchema = {
     thumbnail: {
       anyOf: [thumbnailJsonSchema, { type: "null" }],
     },
+    answerReadinessScore: { type: "number", minimum: 0, maximum: 100 },
+    answerReadinessNotes: { type: "array", items: { type: "string" } },
+    suggestedFaqs: { type: "array", items: faqJsonSchema },
+    geoCiteScore: { type: "number", minimum: 0, maximum: 100 },
+    proofQuotes: { type: "array", items: { type: "string" } },
+    visibilityChecklist: { type: "array", items: visibilityItemJsonSchema },
   },
   required: [
     "optimizationScore",
@@ -95,6 +150,12 @@ const analysisJsonSchema = {
     "optimizedDescription",
     "optimizedTags",
     "thumbnail",
+    "answerReadinessScore",
+    "answerReadinessNotes",
+    "suggestedFaqs",
+    "geoCiteScore",
+    "proofQuotes",
+    "visibilityChecklist",
   ],
 } as const
 
@@ -118,11 +179,19 @@ export async function analyzeGigWithLLM(
     "",
     FIVERR_WINNING_RULES,
     "",
+    FREELANCER_VISIBILITY_RULES,
+    "",
     "Scoring guidance:",
     "- optimizationScore: overall health 0-100 (weight conversion blockers as heavily as keyword gaps).",
     "- rankingPotential: Low if the listing uses saturated generic keywords; High if it uses specific long-tail terms aligned with current demand.",
     "- clickabilityPercentage: estimated relative CTR vs category median.",
     "- buyerTrustScore: trust signals from description, FAQs, packages, social proof — punish vague 'I am passionate' copy.",
+    "- answerReadinessScore (AEO) 0-100: first-sentence clarity + FAQ coverage of buyer objections (formats, revisions, rights, turnaround).",
+    "- geoCiteScore (GEO) 0-100: niche specificity + citable proof a client-facing AI could recommend; low if vague 'I do everything'.",
+    "- answerReadinessNotes: 2-4 specific AEO gaps.",
+    "- suggestedFaqs: 3-5 paste-ready Q&A pairs for THIS gig (not generic).",
+    "- proofQuotes: 1-3 short lines grounded in THIS listing (or honest capability claims) — NEVER invent clients/metrics.",
+    "- visibilityChecklist: 4-7 actions with layer seo|aeo|geo|aio (id, title, detail).",
     "Critiques must be specific, actionable, and reference real elements of the gig.",
     "Roast comments should be witty and brutally honest but never abusive.",
     "Optimized copy MUST follow the Fiverr winning structure above AND target the language/buyer intent of THIS gig's category (e.g. minimalist/vector/mascot for logo design; Premiere Pro/reels/short-form for video editing; SEO/long-form for content writing; Next.js/Supabase for web dev). Mirror what real buyers in this exact niche search for — never default to dev-stack jargon if the gig is not a dev gig.",
@@ -242,5 +311,23 @@ export async function analyzeGigWithLLM(
       `OpenAI returned data that does not match the expected schema: ${parsed.error.message}`,
     )
   }
-  return parsed.data
+
+  const data = parsed.data
+  return {
+    ...data,
+    answerReadinessScore: Math.round(data.answerReadinessScore),
+    answerReadinessNotes: data.answerReadinessNotes
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 8)
+      .slice(0, 4),
+    suggestedFaqs: cleanQaPairs(data.suggestedFaqs, 5),
+    geoCiteScore: Math.round(data.geoCiteScore),
+    proofQuotes: cleanProofQuotes(data.proofQuotes, 3),
+    visibilityChecklist: cleanChecklist(
+      data.visibilityChecklist,
+      DEFAULT_GIG_CHECKLIST,
+      4,
+      7,
+    ),
+  }
 }

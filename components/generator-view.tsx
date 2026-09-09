@@ -791,6 +791,47 @@ function ResultDisplay({
         </ul>
       </Section>
 
+      {((result.buyerAiQuestions?.length ?? 0) > 0 ||
+        (result.visibilityActions?.length ?? 0) > 0) && (
+        <Section
+          icon={<Sparkles className="size-4 text-emerald" />}
+          title="Visibility — AEO & GEO"
+          subtitle="Own the questions clients ask AI, then ship the listing checklist"
+          copyText={[
+            ...(result.buyerAiQuestions ?? []).map((q) => `Q: ${q}`),
+            "",
+            ...(result.visibilityActions ?? []).map((a, i) => `${i + 1}. ${a}`),
+          ].join("\n")}
+        >
+          <div className="space-y-4">
+            {(result.buyerAiQuestions?.length ?? 0) > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Questions buyers ask AI
+                </p>
+                <ul className="space-y-1.5 pl-4 text-sm text-muted-foreground [&>li]:list-disc">
+                  {result.buyerAiQuestions!.map((q, i) => (
+                    <li key={i}>{q}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {(result.visibilityActions?.length ?? 0) > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  After you publish
+                </p>
+                <ol className="space-y-1.5 pl-4 text-sm text-muted-foreground [&>li]:list-decimal">
+                  {result.visibilityActions!.map((a, i) => (
+                    <li key={i}>{a}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
+          </div>
+        </Section>
+      )}
+
       <Section
         icon={<ClipboardList className="size-4 text-emerald" />}
         title="Buyer Requirements"

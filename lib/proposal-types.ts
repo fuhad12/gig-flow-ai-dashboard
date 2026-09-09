@@ -61,6 +61,18 @@ export interface UpworkProposal {
   redFlags: JobRedFlag[]
   /** Positive signals that make the job worth pursuing. */
   greenFlags: string[]
+  /**
+   * GEO: would an AI shortlist recommend this freelancer for THIS job
+   * given the stated niche/skills/proof? Optional on older cached rows.
+   */
+  aiRecommendScore?: number
+  /** One–two sentences explaining the recommend score. */
+  aiRecommendNote?: string
+  /**
+   * AEO: paste-ready answers to likely screening questions inferred
+   * from the job post (or common niche objections).
+   */
+  screeningAnswers?: Array<{ question: string; answer: string }>
 }
 
 export interface ProposalResponse {

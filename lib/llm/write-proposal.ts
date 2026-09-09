@@ -10,7 +10,7 @@
 
 import { z } from "zod"
 
-import { UPWORK_WINNING_RULES } from "@/lib/llm/conversion-playbook"
+import { UPWORK_WINNING_RULES, FREELANCER_VISIBILITY_RULES } from "@/lib/llm/conversion-playbook"
 import { getLlmProvider } from "@/lib/llm/provider"
 import { callWithTruncationRetry, safeJsonParse } from "@/lib/llm/truncation"
 import type {
@@ -20,12 +20,18 @@ import type {
   RedFlagSeverity,
   UpworkProposal,
 } from "@/lib/proposal-types"
+import { cleanQaPairs } from "@/lib/visibility-types"
 
 const RedFlagSchema = z.object({
   code: z.string().min(2).max(64),
   severity: z.enum(["high", "medium", "low"]),
   label: z.string().min(2).max(80),
   detail: z.string().min(8).max(280),
+})
+
+const QaSchema = z.object({
+  question: z.string().min(8).max(200),
+  answer: z.string().min(12).max(600),
 })
 
 const ProposalSchema = z.object({
@@ -39,6 +45,9 @@ const ProposalSchema = z.object({
   fitSummary: z.string().min(20).max(400),
   redFlags: z.array(RedFlagSchema).default([]),
   greenFlags: z.array(z.string()).default([]),
+  aiRecommendScore: z.number().min(0).max(100).default(50),
+  aiRecommendNote: z.string().min(12).max(320).default(""),
+  screeningAnswers: z.array(QaSchema).default([]),
 })
 
 const DEFAULT_WIN_ANGLES = [
@@ -160,6 +169,14 @@ function normalizeProposal(
     fitSummary: data.fitSummary.trim().slice(0, 400),
     redFlags,
     greenFlags: cleanStrings(data.greenFlags, 8).slice(0, 5),
+    aiRecommendScore: Math.max(
+      0,
+      Math.min(100, Math.round(data.aiRecommendScore)),
+    ),
+    aiRecommendNote:
+      data.aiRecommendNote.trim().slice(0, 320) ||
+      "Recommendability rises when niche + one concrete proof match the job.",
+    screeningAnswers: cleanQaPairs(data.screeningAnswers, 5),
   }
 }
 
@@ -175,6 +192,8 @@ export async function writeUpworkProposal(
     "Return strictly valid JSON matching the schema.",
     "",
     UPWORK_WINNING_RULES,
+    "",
+    FREELANCER_VISIBILITY_RULES,
     "",
     `Tone: ${tone} — still follow the winning structure above.`,
     "If the job budget is clear, suggest a bid that is competitive but not desperate (slightly under mid when experience is thin; at mid/upper when proof is strong).",
@@ -192,6 +211,11 @@ export async function writeUpworkProposal(
     "  Each flag needs severity (high|medium|low), short label, and detail that cites the job post.",
     "  High severity examples: unpaid test / free sample, budget far below market, payment-outside-Upwork hints, extreme skill mismatch.",
     "- greenFlags: 0-5 positive signals (clear deliverables, realistic budget, skills match, milestone-friendly, etc.).",
+    "",
+    "AEO / GEO (visibility):",
+    "- aiRecommendScore 0-100: would an AI shortlist name THIS freelancer for THIS job given stated niche/skills/proof? Low if vague generalist.",
+    "- aiRecommendNote: 1-2 sentences on what would raise recommendability (niche density, one proof line).",
+    "- screeningAnswers: 2-5 Q&A pairs. Prefer real screening questions from the job post; else common buyer objections for THIS niche. Answers must use only facts from the freelancer profile block.",
     "",
     "hook field: the first sentence of the proposal only (must contain a job-specific detail).",
     "proposal field: FULL paste-ready cover letter including the hook (120-200 words).",
@@ -235,6 +259,9 @@ export async function writeUpworkProposal(
       "fitSummary",
       "redFlags",
       "greenFlags",
+      "aiRecommendScore",
+      "aiRecommendNote",
+      "screeningAnswers",
     ],
     properties: {
       hook: {
@@ -310,6 +337,30 @@ export async function writeUpworkProposal(
         items: { type: "string" },
         maxItems: 5,
         description: "Positive reasons this job is worth pursuing.",
+      },
+      aiRecommendScore: {
+        type: "number",
+        description:
+          "0-100: would an AI shortlist recommend this freelancer for this job?",
+      },
+      aiRecommendNote: {
+        type: "string",
+        description: "1-2 sentences on recommendability.",
+      },
+      screeningAnswers: {
+        type: "array",
+        maxItems: 5,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["question", "answer"],
+          properties: {
+            question: { type: "string" },
+            answer: { type: "string" },
+          },
+        },
+        description:
+          "Paste-ready screening Q answers from the job post or niche objections.",
       },
     },
   }

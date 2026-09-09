@@ -27,6 +27,11 @@ export interface ThumbnailAnalysis {
   improvedConcept: string
 }
 
+import type {
+  QaPair,
+  VisibilityChecklistItem,
+} from "@/lib/visibility-types"
+
 export interface GigAnalysis {
   optimizationScore: number
   rankingPotential: "Low" | "Medium" | "High"
@@ -38,6 +43,24 @@ export interface GigAnalysis {
   optimizedDescription: string
   optimizedTags: string[]
   thumbnail: ThumbnailAnalysis | null
+  /**
+   * AEO: how ready the listing is to be extracted as a direct answer
+   * (hook + FAQ clarity). Optional for older cached audits.
+   */
+  answerReadinessScore?: number
+  /** Short AEO gaps / fixes. */
+  answerReadinessNotes?: string[]
+  /** Paste-ready FAQ suggestions that remove pre-order DMs. */
+  suggestedFaqs?: QaPair[]
+  /**
+   * GEO: how citable / recommendable the gig is if a buyer asks an AI
+   * for someone in this niche. Optional for older cached audits.
+   */
+  geoCiteScore?: number
+  /** Short lines AI could quote (must be grounded in the gig — no fakes). */
+  proofQuotes?: string[]
+  /** Weekly SEO → AEO → GEO → AIO actions. */
+  visibilityChecklist?: VisibilityChecklistItem[]
 }
 
 export interface AnalyzeResponse {

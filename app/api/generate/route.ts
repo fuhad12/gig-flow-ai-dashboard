@@ -16,7 +16,7 @@ import {
   runWithFiverrValidation,
   type FiverrCheckable,
 } from "@/lib/llm/with-fiverr-validation"
-import { FIVERR_WINNING_RULES } from "@/lib/llm/conversion-playbook"
+import { FIVERR_WINNING_RULES, FREELANCER_VISIBILITY_RULES } from "@/lib/llm/conversion-playbook"
 import { checkRateLimit, ipFromRequest } from "@/lib/rate-limit"
 import type { GigGeneration } from "@/lib/generation-types"
 
@@ -98,6 +98,8 @@ const GenerationShape = z.object({
     .max(FIVERR.requirement.count.max),
   thumbnailIdeas: z.array(z.string().min(1)).min(3).max(5),
   gigImagePrompt: z.string().min(20),
+  buyerAiQuestions: z.array(z.string().min(8)).min(3).max(6).default([]),
+  visibilityActions: z.array(z.string().min(12)).min(3).max(6).default([]),
 })
 
 // ---------- JSON Schema mirror for OpenAI strict structured outputs ----------
@@ -156,6 +158,8 @@ const generationJsonSchema = {
     requirements: { type: "array", items: { type: "string" } },
     thumbnailIdeas: { type: "array", items: { type: "string" } },
     gigImagePrompt: { type: "string" },
+    buyerAiQuestions: { type: "array", items: { type: "string" } },
+    visibilityActions: { type: "array", items: { type: "string" } },
   },
   required: [
     "primaryKeyword",
@@ -168,6 +172,8 @@ const generationJsonSchema = {
     "requirements",
     "thumbnailIdeas",
     "gigImagePrompt",
+    "buyerAiQuestions",
+    "visibilityActions",
   ],
 } as const
 
@@ -216,6 +222,8 @@ function truncateGeneration(gen: GigGeneration): GigGeneration {
     requirements: gen.requirements.map((r) =>
       softTruncate(r, FIVERR.requirement.item.max),
     ),
+    buyerAiQuestions: (gen.buyerAiQuestions ?? []).slice(0, 6),
+    visibilityActions: (gen.visibilityActions ?? []).slice(0, 6),
   }
 }
 
@@ -361,6 +369,8 @@ export async function POST(req: Request) {
     "",
     FIVERR_WINNING_RULES,
     "",
+    FREELANCER_VISIBILITY_RULES,
+    "",
     "WORKFLOW",
     "1. Pick ONE primaryKeyword — a SHORT, specific tool/style/sub-category term buyers in THIS niche actually type into Fiverr search.",
     "   Prefer single words or short brand/style names. The right pick depends on the niche:",
@@ -404,6 +414,8 @@ export async function POST(req: Request) {
     `- requirements: ${FIVERR.requirement.count.min}-${FIVERR.requirement.count.max} buyer-input prompts that unblock delivery. Each max ${FIVERR.requirement.item.max} chars. Specific, not vague — logo: "Share your brand name and 2-3 reference logos you like." / video: "Send the raw footage and any brand colors." / voiceover: "Paste the script and let me know your target accent.".`,
     "- thumbnailIdeas: 3-5 concrete visual concepts (subject, color, headline copy) the seller can brief a designer with — appropriate to what's actually being sold (logo mark previews for designers, before/after stills for video editors, mic+waveform shots for voiceover, etc.).",
     "- gigImagePrompt: a single ready-to-paste prompt for an AI image generator (Midjourney/DALL-E style) describing the hero thumbnail.",
+    "- buyerAiQuestions: 3-6 questions a client would ask ChatGPT/Perplexity when hiring in THIS niche (e.g. 'best freelancer for Stripe Connect SaaS billing'). Seller can own these in FAQs / LinkedIn / portfolio.",
+    "- visibilityActions: 3-5 concrete SEO/AEO/GEO steps after publishing (FAQ paste, first-sentence answer, one proof metric, niche-consistent LinkedIn bio).",
     "",
     "If niche intelligence is provided below, ground keyword and pricing choices in it — the real competitor titles and keywords tell you what buyers in this niche actually search for.",
     trendingTerms

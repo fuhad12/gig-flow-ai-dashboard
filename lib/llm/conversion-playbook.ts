@@ -211,3 +211,18 @@ export const UPWORK_PROFILE_RULES = [
   "",
   `- Ban fluff: ${BANNED_FLUFF}.`,
 ].join("\n")
+
+/**
+ * Freelancer visibility stack — SEO (marketplace search) + AEO (be the
+ * answer) + GEO (get cited when clients ask AI) + AIO (consistent niche).
+ * Used across gig audit, proposals, and profile rewrites.
+ */
+export const FREELANCER_VISIBILITY_RULES = [
+  "VISIBILITY STACK (apply on top of conversion rules):",
+  "- SEO: rank for the buyer search phrase on Fiverr/Upwork (keyword in title + natural density + niche tags/skills).",
+  "- AEO (Answer Engine): be extractable as the direct answer — first sentence states the outcome; FAQs / screening answers kill pre-hire questions.",
+  "- GEO (Generative Engine): be citable when a client asks ChatGPT/Perplexity/Uma for a shortlist — niche density + one concrete proof quote (metric or outcome), never fake clients.",
+  "- AIO: same specialty nouns everywhere (headline, overview, skills, gigs) so matching systems do not dilute you.",
+  "- visibilityChecklist: 4–8 concrete actions tagged seo|aeo|geo|aio that the seller can do this week.",
+  "- Never invent metrics, clients, or ratings. Prefer capability + process when proof is thin.",
+].join("\n")

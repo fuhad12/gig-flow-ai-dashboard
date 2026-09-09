@@ -17,8 +17,10 @@ import { FunnelDiagnosticCard } from "@/components/funnel-diagnostic-card"
 import { GigHealthGauge } from "@/components/gig-health-gauge"
 import { OptimizationPanel } from "@/components/optimization-panel"
 import { ShareModal } from "@/components/share-modal"
+import { VisibilityPanel } from "@/components/visibility-panel"
 
 import type { AnalyzeResponse } from "@/lib/analysis-types"
+import { DEFAULT_GIG_CHECKLIST } from "@/lib/visibility-types"
 
 interface AuditorViewProps {
   onBack: () => void
@@ -202,6 +204,27 @@ export function AuditorView({ onBack, data }: AuditorViewProps) {
       <div className="border-b border-border p-4 md:p-6">
         <FunnelDiagnosticCard />
       </div>
+
+      {(analysis.answerReadinessScore != null ||
+        analysis.geoCiteScore != null ||
+        (analysis.visibilityChecklist?.length ?? 0) > 0 ||
+        (analysis.suggestedFaqs?.length ?? 0) > 0) && (
+        <div className="border-b border-border p-4 md:p-6">
+          <VisibilityPanel
+            answerReadinessScore={analysis.answerReadinessScore}
+            geoCiteScore={analysis.geoCiteScore}
+            answerReadinessNotes={analysis.answerReadinessNotes}
+            proofQuotes={analysis.proofQuotes}
+            faqs={analysis.suggestedFaqs}
+            checklist={
+              analysis.visibilityChecklist?.length
+                ? analysis.visibilityChecklist
+                : DEFAULT_GIG_CHECKLIST
+            }
+            faqTitle="Suggested gig FAQs"
+          />
+        </div>
+      )}
 
       {/* Split-Screen Panels — stack on mobile, side-by-side from md up.
           No more `md:overflow-hidden` / `flex-1` height constraints here.
