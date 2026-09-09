@@ -256,17 +256,21 @@ export function LandingView({
           </Card>
         )}
 
-        {/* Stats */}
+        {/* Honest product truths — no invented vanity metrics. */}
         {!isScanning && (
           <div className="mt-8 grid grid-cols-3 gap-4 text-center sm:mt-12 sm:gap-6">
             {[
-              { label: "Gigs Analyzed", value: "24,891" },
-              { label: "Avg. Rank Boost", value: "+38%" },
-              { label: "Users This Month", value: "2,140" },
+              { label: "Marketplaces", value: "Fiverr + Upwork" },
+              { label: "What you get", value: "Paste-ready fixes" },
+              { label: "Visibility stack", value: "SEO · AEO · GEO" },
             ].map((stat) => (
               <div key={stat.label}>
-                <div className="text-xl font-bold text-foreground sm:text-2xl">{stat.value}</div>
-                <div className="mt-1 text-[11px] text-muted-foreground sm:text-xs">{stat.label}</div>
+                <div className="text-base font-bold text-foreground sm:text-lg md:text-xl">
+                  {stat.value}
+                </div>
+                <div className="mt-1 text-[11px] text-muted-foreground sm:text-xs">
+                  {stat.label}
+                </div>
               </div>
             ))}
           </div>
