@@ -9,14 +9,18 @@
 import { useEffect, useState, type FormEvent } from "react"
 import {
   AlertCircle,
+  AlertTriangle,
   Briefcase,
   Check,
   CheckCircle2,
   Copy,
   Loader2,
   PenLine,
+  ShieldAlert,
   Sparkles,
   Target,
+  ThumbsDown,
+  ThumbsUp,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -39,7 +43,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-import type { UpworkProposal } from "@/lib/proposal-types"
+import type {
+  JobFitVerdict,
+  JobRedFlag,
+  UpworkProposal,
+} from "@/lib/proposal-types"
 import { buildSkillsFromTags } from "@/lib/profile-optimizer-types"
 
 export { buildSkillsFromTags }
@@ -188,8 +196,8 @@ export function ProposalView({
           Upwork proposal writer
         </h1>
         <p className="text-sm text-muted-foreground">
-          Paste a job post. Niche, skills, and tools pull from your Settings
-          profile — only the job text is required.
+          Paste a job post. We score fit + red flags first, then draft a
+          proposal — so you spend connects on jobs worth winning.
         </p>
       </div>
 
@@ -347,12 +355,12 @@ export function ProposalView({
                 {loading ? (
                   <>
                     <Loader2 className="size-4 animate-spin" />
-                    Writing proposal…
+                    Analyzing fit & writing…
                   </>
                 ) : (
                   <>
                     <Sparkles className="size-4" />
-                    Write proposal
+                    Analyze & write proposal
                   </>
                 )}
               </Button>
@@ -366,7 +374,8 @@ export function ProposalView({
               <CardContent className="flex flex-col items-center justify-center gap-2 py-16 text-center">
                 <Target className="size-8 text-muted-foreground/50" />
                 <p className="text-sm text-muted-foreground">
-                  Your tailored proposal will show up here.
+                  Fit score, red flags, and your tailored proposal show up
+                  here.
                 </p>
               </CardContent>
             </Card>
@@ -376,7 +385,7 @@ export function ProposalView({
             <Card className="border-border bg-card">
               <CardContent className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
                 <Loader2 className="size-4 animate-spin text-emerald" />
-                Reading the job and drafting…
+                Scoring the job and drafting…
               </CardContent>
             </Card>
           )}
@@ -388,33 +397,157 @@ export function ProposalView({
   )
 }
 
+function verdictMeta(verdict: JobFitVerdict): {
+  label: string
+  className: string
+  icon: typeof ThumbsUp
+} {
+  switch (verdict) {
+    case "strong_apply":
+      return {
+        label: "Strong apply",
+        className: "border-emerald/40 bg-emerald/10 text-emerald",
+        icon: ThumbsUp,
+      }
+    case "skip":
+      return {
+        label: "Skip this job",
+        className: "border-danger/40 bg-danger/10 text-danger",
+        icon: ThumbsDown,
+      }
+    case "apply_with_caution":
+    default:
+      return {
+        label: "Apply with caution",
+        className:
+          "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+        icon: AlertTriangle,
+      }
+  }
+}
+
+function scoreTone(score: number): string {
+  if (score >= 75) return "text-emerald"
+  if (score >= 50) return "text-amber-600 dark:text-amber-300"
+  return "text-danger"
+}
+
+function severityBadge(severity: JobRedFlag["severity"]): string {
+  if (severity === "high") return "border-danger/40 bg-danger/10 text-danger"
+  if (severity === "medium")
+    return "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+  return "border-border bg-muted text-muted-foreground"
+}
+
 function ProposalResult({ result }: { result: UpworkProposal }) {
+  const verdict = result.fitVerdict ?? "apply_with_caution"
+  const meta = verdictMeta(verdict)
+  const VerdictIcon = meta.icon
+  const redFlags = result.redFlags ?? []
+  const greenFlags = result.greenFlags ?? []
+  const summary =
+    result.fitSummary?.trim() ||
+    "Review the score and flags before spending a connect."
+
   return (
     <div className="space-y-4">
-      <Card className="border-emerald/30 bg-emerald/5">
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="size-4 text-emerald" />
-            <span className="text-sm font-medium text-foreground">
-              Fit score
-            </span>
-            <Badge
-              variant="outline"
-              className="border-emerald/40 text-emerald"
-            >
-              {Math.round(result.fitScore)}/100
-            </Badge>
-          </div>
-          {result.suggestedBid != null && (
-            <div className="text-sm text-muted-foreground">
-              Suggested bid:{" "}
-              <span className="font-semibold text-foreground">
-                ${result.suggestedBid.toLocaleString("en-US")}
+      <Card
+        className={
+          verdict === "skip"
+            ? "border-danger/30 bg-danger/5"
+            : verdict === "strong_apply"
+              ? "border-emerald/30 bg-emerald/5"
+              : "border-amber-500/30 bg-amber-500/5"
+        }
+      >
+        <CardContent className="space-y-3 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-foreground">
+                Job fit
               </span>
+              <Badge
+                variant="outline"
+                className={`font-semibold tabular-nums ${scoreTone(result.fitScore)}`}
+              >
+                {Math.round(result.fitScore)}/100
+              </Badge>
+              <Badge variant="outline" className={`gap-1 ${meta.className}`}>
+                <VerdictIcon className="size-3" />
+                {meta.label}
+              </Badge>
             </div>
+            {result.suggestedBid != null && (
+              <div className="text-sm text-muted-foreground">
+                Suggested bid:{" "}
+                <span className="font-semibold text-foreground">
+                  ${result.suggestedBid.toLocaleString("en-US")}
+                </span>
+              </div>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">{summary}</p>
+          {verdict === "skip" && (
+            <p className="flex items-start gap-2 text-xs text-danger">
+              <ShieldAlert className="mt-0.5 size-3.5 shrink-0" />
+              We still drafted a proposal in case you override — but this
+              job looks likely to waste a connect.
+            </p>
           )}
         </CardContent>
       </Card>
+
+      {(redFlags.length > 0 || greenFlags.length > 0) && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {redFlags.length > 0 && (
+            <Card className="border-danger/20 bg-card">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm text-danger">
+                  <AlertTriangle className="size-3.5" />
+                  Red flags
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2.5">
+                {redFlags.map((flag, i) => (
+                  <div key={`${flag.code}-${i}`} className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-sm font-medium text-foreground">
+                        {flag.label}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] uppercase ${severityBadge(flag.severity)}`}
+                      >
+                        {flag.severity}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {flag.detail}
+                    </p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+          {greenFlags.length > 0 && (
+            <Card className="border-emerald/20 bg-card">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm text-emerald">
+                  <CheckCircle2 className="size-3.5" />
+                  Green flags
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-1.5 pl-4 text-sm text-muted-foreground [&>li]:list-disc">
+                  {greenFlags.map((g, i) => (
+                    <li key={i}>{g}</li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       <Card className="border-border bg-card">
         <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2">

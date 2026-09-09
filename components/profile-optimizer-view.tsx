@@ -380,13 +380,33 @@ function OptimizationResult({ result }: { result: ProfileOptimization }) {
       </Card>
 
       {result.suggestedRateUsd != null && (
-        <Card className="border-emerald/30 bg-emerald/5">
+        <Card
+          className={
+            result.accountStage === "getting_started"
+              ? "border-amber-500/30 bg-amber-500/5"
+              : "border-emerald/30 bg-emerald/5"
+          }
+        >
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-emerald">
+            <CardTitle
+              className={`text-sm ${
+                result.accountStage === "getting_started"
+                  ? "text-amber-700 dark:text-amber-300"
+                  : "text-emerald"
+              }`}
+            >
               {result.suggestedRateLabel}
             </CardTitle>
             <CardDescription className="text-xs">
-              Positioning signal — adjust per job if needed
+              {[
+                result.accountStageLabel,
+                result.rateFamilyLabel
+                  ? `${result.rateFamilyLabel} market`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") ||
+                "Matched to your niche + traction — not a fantasy premium rate"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-1">
@@ -401,6 +421,13 @@ function OptimizationResult({ result }: { result: ProfileOptimization }) {
             {result.suggestedRateNote && (
               <p className="text-sm text-muted-foreground">
                 {result.suggestedRateNote}
+              </p>
+            )}
+            {result.accountStage === "getting_started" && (
+              <p className="pt-1 text-xs text-muted-foreground">
+                Right now, win jobs by standing out (specific niche title,
+                clear offer, portfolio samples) — raise rates after 3–5 strong
+                reviews.
               </p>
             )}
           </CardContent>

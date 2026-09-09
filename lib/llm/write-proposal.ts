@@ -3,6 +3,9 @@
  *
  * Paste-first: the job text is the source of truth. No Upwork scrape
  * required for the MVP — sellers copy the job post into the form.
+ *
+ * Also returns a job-fit verdict + red/green flags so sellers can skip
+ * bad connects before pasting the cover letter.
  */
 
 import { z } from "zod"
@@ -10,7 +13,20 @@ import { z } from "zod"
 import { UPWORK_WINNING_RULES } from "@/lib/llm/conversion-playbook"
 import { getLlmProvider } from "@/lib/llm/provider"
 import { callWithTruncationRetry, safeJsonParse } from "@/lib/llm/truncation"
-import type { ProposalInput, UpworkProposal } from "@/lib/proposal-types"
+import type {
+  JobFitVerdict,
+  JobRedFlag,
+  ProposalInput,
+  RedFlagSeverity,
+  UpworkProposal,
+} from "@/lib/proposal-types"
+
+const RedFlagSchema = z.object({
+  code: z.string().min(2).max(64),
+  severity: z.enum(["high", "medium", "low"]),
+  label: z.string().min(2).max(80),
+  detail: z.string().min(8).max(280),
+})
 
 const ProposalSchema = z.object({
   hook: z.string().min(10).max(280),
@@ -19,6 +35,10 @@ const ProposalSchema = z.object({
   winAngles: z.array(z.string()).default([]),
   customizeChecklist: z.array(z.string()).default([]),
   fitScore: z.number().min(0).max(100),
+  fitVerdict: z.enum(["strong_apply", "apply_with_caution", "skip"]),
+  fitSummary: z.string().min(20).max(400),
+  redFlags: z.array(RedFlagSchema).default([]),
+  greenFlags: z.array(z.string()).default([]),
 })
 
 const DEFAULT_WIN_ANGLES = [
@@ -30,6 +50,19 @@ const DEFAULT_CHECKLIST = [
   "Add your real name and one portfolio / Loom link before sending.",
   "Replace any placeholder proof with one concrete metric from your work.",
 ]
+
+const KNOWN_RED_FLAG_CODES = [
+  "budget_too_low",
+  "unpaid_test",
+  "vague_scope",
+  "scope_creep",
+  "unrealistic_timeline",
+  "skill_mismatch",
+  "payment_risk",
+  "agency_only",
+  "already_filled_signal",
+  "other",
+] as const
 
 function cleanStrings(items: string[], minLen = 5): string[] {
   return items
@@ -54,9 +87,63 @@ function padList(
   return out.slice(0, max)
 }
 
+function normalizeCode(raw: string): string {
+  const code = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64)
+  if ((KNOWN_RED_FLAG_CODES as readonly string[]).includes(code)) return code
+  return code || "other"
+}
+
+function normalizeSeverity(raw: string): RedFlagSeverity {
+  if (raw === "high" || raw === "medium" || raw === "low") return raw
+  return "medium"
+}
+
+function normalizeRedFlags(
+  flags: z.infer<typeof RedFlagSchema>[],
+): JobRedFlag[] {
+  const out: JobRedFlag[] = []
+  const seen = new Set<string>()
+  for (const f of flags.slice(0, 6)) {
+    const code = normalizeCode(f.code)
+    const key = `${code}:${f.label.trim().toLowerCase()}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({
+      code,
+      severity: normalizeSeverity(f.severity),
+      label: f.label.trim().slice(0, 80),
+      detail: f.detail.trim().slice(0, 280),
+    })
+  }
+  return out
+}
+
+function deriveVerdict(
+  score: number,
+  redFlags: JobRedFlag[],
+  hinted: JobFitVerdict,
+): JobFitVerdict {
+  const highCount = redFlags.filter((f) => f.severity === "high").length
+  if (highCount >= 2 || score < 35) return "skip"
+  if (highCount >= 1 || score < 60) {
+    return hinted === "strong_apply" ? "apply_with_caution" : hinted
+  }
+  if (score >= 75 && highCount === 0) return "strong_apply"
+  return hinted
+}
+
 function normalizeProposal(
   data: z.infer<typeof ProposalSchema>,
 ): UpworkProposal {
+  const fitScore = Math.max(0, Math.min(100, Math.round(data.fitScore)))
+  const redFlags = normalizeRedFlags(data.redFlags)
+  const fitVerdict = deriveVerdict(fitScore, redFlags, data.fitVerdict)
+
   return {
     hook: data.hook.trim(),
     proposal: data.proposal.trim(),
@@ -68,7 +155,11 @@ function normalizeProposal(
       2,
       6,
     ),
-    fitScore: Math.max(0, Math.min(100, Math.round(data.fitScore))),
+    fitScore,
+    fitVerdict,
+    fitSummary: data.fitSummary.trim().slice(0, 400),
+    redFlags,
+    greenFlags: cleanStrings(data.greenFlags, 8).slice(0, 5),
   }
 }
 
@@ -79,8 +170,8 @@ export async function writeUpworkProposal(
   const tone = input.tone ?? "professional"
 
   const systemPrompt = [
-    "You are JobFlow AI, an Upwork proposal coach whose only job is winning interviews.",
-    "You write short, client-friendly, high-converting proposals — never generic AI filler.",
+    "You are JobFlow AI, an Upwork proposal coach whose only job is winning interviews AND protecting connects.",
+    "You (1) score whether THIS job is worth applying to, (2) list red/green flags, then (3) write a short high-converting proposal.",
     "Return strictly valid JSON matching the schema.",
     "",
     UPWORK_WINNING_RULES,
@@ -88,7 +179,20 @@ export async function writeUpworkProposal(
     `Tone: ${tone} — still follow the winning structure above.`,
     "If the job budget is clear, suggest a bid that is competitive but not desperate (slightly under mid when experience is thin; at mid/upper when proof is strong).",
     "If budget is unclear or hourly, set suggestedBid to null.",
-    "fitScore: honest 0-100 match between THIS freelancer and THIS job. If fit is weak, still write a tight proposal but score low and put honest gaps in customizeChecklist.",
+    "",
+    "JOB FIT (be honest — wasting a connect is worse than a soft skip):",
+    "- fitScore 0-100: skill/niche match between THIS freelancer and THIS job.",
+    "- fitVerdict: strong_apply | apply_with_caution | skip",
+    "  • strong_apply: clear match, sane scope/budget, few risks",
+    "  • apply_with_caution: salvageable but has risks — still write a proposal",
+    "  • skip: likely unpaid work, extreme mismatch, or toxic signals — still write a short proposal in case they override, but score low",
+    "- fitSummary: 1-2 sentences explaining score + verdict for the seller.",
+    "- redFlags: 0-6 job risks. Prefer these codes when they fit:",
+    `  ${KNOWN_RED_FLAG_CODES.join(", ")}`,
+    "  Each flag needs severity (high|medium|low), short label, and detail that cites the job post.",
+    "  High severity examples: unpaid test / free sample, budget far below market, payment-outside-Upwork hints, extreme skill mismatch.",
+    "- greenFlags: 0-5 positive signals (clear deliverables, realistic budget, skills match, milestone-friendly, etc.).",
+    "",
     "hook field: the first sentence of the proposal only (must contain a job-specific detail).",
     "proposal field: FULL paste-ready cover letter including the hook (120-200 words).",
     "winAngles: ALWAYS return 2-5 short bullets (client benefits).",
@@ -112,7 +216,7 @@ export async function writeUpworkProposal(
       ? `Preferred bid range around: $${input.bidHint}`
       : null,
     "",
-    "Write the proposal most likely to get a reply for THIS job and THIS freelancer.",
+    "First decide if this job is worth a connect. Then write the proposal most likely to get a reply IF they apply.",
   ]
     .filter(Boolean)
     .join("\n")
@@ -127,6 +231,10 @@ export async function writeUpworkProposal(
       "winAngles",
       "customizeChecklist",
       "fitScore",
+      "fitVerdict",
+      "fitSummary",
+      "redFlags",
+      "greenFlags",
     ],
     properties: {
       hook: {
@@ -163,6 +271,46 @@ export async function writeUpworkProposal(
         type: "number",
         description: "0-100 honest fit between freelancer and job.",
       },
+      fitVerdict: {
+        type: "string",
+        enum: ["strong_apply", "apply_with_caution", "skip"],
+        description: "Whether spending a connect is worth it.",
+      },
+      fitSummary: {
+        type: "string",
+        description: "1-2 sentences explaining the score and verdict.",
+      },
+      redFlags: {
+        type: "array",
+        maxItems: 6,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["code", "severity", "label", "detail"],
+          properties: {
+            code: {
+              type: "string",
+              description:
+                "Stable key e.g. budget_too_low, unpaid_test, vague_scope.",
+            },
+            severity: {
+              type: "string",
+              enum: ["high", "medium", "low"],
+            },
+            label: { type: "string" },
+            detail: {
+              type: "string",
+              description: "One sentence citing the job post.",
+            },
+          },
+        },
+      },
+      greenFlags: {
+        type: "array",
+        items: { type: "string" },
+        maxItems: 5,
+        description: "Positive reasons this job is worth pursuing.",
+      },
     },
   }
 
@@ -170,7 +318,7 @@ export async function writeUpworkProposal(
     (maxOutputTokens) =>
       provider.completeStructured({
         model: "smart",
-        temperature: 0.4,
+        temperature: 0.35,
         maxOutputTokens,
         schemaName: "upwork_proposal",
         schema,
@@ -179,7 +327,7 @@ export async function writeUpworkProposal(
           { role: "user", content: userPrompt },
         ],
       }),
-    1536,
+    2048,
     "upwork-proposal",
   )
 

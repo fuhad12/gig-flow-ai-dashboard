@@ -157,11 +157,28 @@ export async function POST(req: Request) {
   }
 
   try {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("selected_niches, skill_tags")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    const nicheSlugs = Array.isArray(profile?.selected_niches)
+      ? (profile.selected_niches as string[]).filter(Boolean)
+      : []
+
     const optimization = await optimizeSellerProfile({
       profileUrl: data.profileUrl,
       platform,
       profileText: scraped.profileText,
       tone: data.tone,
+      nicheSlugs,
+      signals: {
+        namedClients: scraped.namedClients.length,
+        portfolioTitles: scraped.portfolioTitles.length,
+        workHistory: scraped.workHistory.length,
+        overviewLength: scraped.overview.length,
+      },
     })
 
     optimization.scraped = {

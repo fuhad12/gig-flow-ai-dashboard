@@ -3,9 +3,23 @@
  * URL-first: scrape public profile, then rewrite.
  */
 
+import type { RateFamily } from "@/lib/niche-rates"
+import { rateBandForNicheStage } from "@/lib/niche-rates"
+
+export type { RateFamily } from "@/lib/niche-rates"
+
 export type ProfilePlatform = "fiverr" | "upwork"
 
 export type ProfileVerdict = "needs_work" | "solid" | "strong"
+
+/**
+ * Where the seller is in the proof / traction ladder.
+ * Drives rate advice — struggling accounts must not get premium rates.
+ */
+export type AccountStage =
+  | "getting_started"
+  | "building_proof"
+  | "established"
 
 export interface ProfileOptimizeInput {
   /** Public profile URL (fiverr.com/... or upwork.com/...). */
@@ -15,6 +29,15 @@ export interface ProfileOptimizeInput {
   /** Scraped (or pasted) visible profile content. */
   profileText: string
   tone?: "professional" | "friendly" | "direct"
+  /** Optional scrape signals used to stage rate advice. */
+  signals?: {
+    namedClients: number
+    portfolioTitles: number
+    workHistory: number
+    overviewLength: number
+  }
+  /** Settings niche slugs — used to pick niche rate family. */
+  nicheSlugs?: string[]
 }
 
 export interface ProfileOptimization {
@@ -34,12 +57,21 @@ export interface ProfileOptimization {
   /**
    * Suggested profile rate in USD.
    * Upwork: hourly rate. Fiverr: suggested starting package price (or null).
+   * Staged + niche-aware: early writers ≠ early web devs ≠ AI specialists.
    */
   suggestedRateUsd: number | null
   /** Short label for the rate (e.g. "Suggested hourly rate"). */
   suggestedRateLabel: string
   /** One-line why this rate fits (no invented credentials). */
   suggestedRateNote: string
+  /** Traction stage inferred for pricing + action plan. */
+  accountStage: AccountStage
+  /** Short UI label for the stage. */
+  accountStageLabel: string
+  /** Niche rate family used for the band (web_dev, writing, marketing…). */
+  rateFamily: RateFamily
+  /** Human label for the niche band (e.g. "Web development"). */
+  rateFamilyLabel: string
   /** Why this rewrite should win more clients. */
   winAngles: string[]
   /** Ordered steps to apply on the live profile. */
@@ -99,6 +131,26 @@ export function verdictFromScore(score: number): {
     verdictLabel:
       "Strong profile signals — small polish on specificity and proof will push it further.",
   }
+}
+
+export function accountStageLabel(stage: AccountStage): string {
+  switch (stage) {
+    case "getting_started":
+      return "Getting started — win first jobs"
+    case "building_proof":
+      return "Building proof — raise carefully"
+    case "established":
+      return "Established — market positioning"
+  }
+}
+
+/** Soft rate bands by stage × niche (Upwork hourly / Fiverr package USD). */
+export function rateBandForStage(
+  platform: ProfilePlatform,
+  stage: AccountStage,
+  family: RateFamily = "general",
+): { min: number; max: number; target: number; family: RateFamily; label: string } {
+  return rateBandForNicheStage(platform, stage, family)
 }
 
 /** Build a short offer sentence from Settings skill tags (proposals / generator). */
