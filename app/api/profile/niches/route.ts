@@ -22,7 +22,7 @@ export const runtime = "nodejs"
  *
  * Per-tier caps:
  *   niches:     free → 3, pro → 6, agency → 12
- *   skillTags:  free → 5, pro → 10, agency → 20
+ *   skillTags:  free → 10, pro → 15, agency → 25
  *
  * Server-side enforcement (cap + slug whitelist + per-tag length) is the
  * source of truth — the UI mirrors the same rules for instant feedback
@@ -34,16 +34,16 @@ const MAX_SKILL_TAG_LENGTH = 40
 // Per-tier skill tag caps. Mirrors `nicheLimitForTier` in lib/quota.ts —
 // kept here because skill tags are local to this route's domain.
 function skillTagLimitForTier(tier: "free" | "pro" | "agency"): number {
-  if (tier === "agency") return 20
-  if (tier === "pro") return 10
-  return 5
+  if (tier === "agency") return 25
+  if (tier === "pro") return 15
+  return 10
 }
 
 // `skillTags` accepts `null` so the client can clear the entire array;
 // it's normalized to `[]` below.
 const BodySchema = z.object({
   selectedNiches: z.array(z.string()).max(20).optional(),
-  skillTags: z.array(z.string()).max(20).nullable().optional(),
+  skillTags: z.array(z.string()).max(25).nullable().optional(),
 })
 
 export async function GET() {

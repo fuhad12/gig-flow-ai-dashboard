@@ -284,11 +284,26 @@ export async function runWithFiverrValidation<T>(
       if (!(err instanceof TruncatedResponseError) || firstBudget == null) {
         throw err
       }
+      const bumped = Math.min(firstBudget * 2, 16_384)
       console.warn(
-        `[generate] LLM response truncated at ${firstBudget} tokens; retrying with ${firstBudget * 2}`,
+        `[generate] LLM response truncated at ${firstBudget} tokens; retrying with ${bumped}`,
       )
       callsUsed += 1
-      content = await callProvider(firstBudget * 2)
+      try {
+        content = await callProvider(bumped)
+      } catch (err2) {
+        if (!(err2 instanceof TruncatedResponseError) || bumped >= 16_384) {
+          throw new Error(
+            "The AI response was cut off before it finished. Please try again.",
+          )
+        }
+        const finalBudget = 16_384
+        console.warn(
+          `[generate] still truncated at ${bumped}; final retry with ${finalBudget}`,
+        )
+        callsUsed += 1
+        content = await callProvider(finalBudget)
+      }
     }
     return { value: opts.parse(content), raw: content }
   }

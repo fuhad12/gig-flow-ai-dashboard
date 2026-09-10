@@ -621,7 +621,7 @@ function NichesCard({
       // more than 1 niche before the real limit lands.
       tier: "free",
       nicheLimit: 1,
-      skillTagLimit: 5,
+      skillTagLimit: 10,
     }
   })
   // Drafts live next to the persisted state so the user can edit without
@@ -681,7 +681,7 @@ function NichesCard({
   }, [])
 
   const nicheLimit = state?.nicheLimit ?? 3
-  const skillTagLimit = state?.skillTagLimit ?? 5
+  const skillTagLimit = state?.skillTagLimit ?? 10
   const tier = state?.tier ?? "free"
 
   // The "primary" niche is the first one in the array — it's what AI prompts

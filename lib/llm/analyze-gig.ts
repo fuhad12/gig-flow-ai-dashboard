@@ -188,10 +188,10 @@ export async function analyzeGigWithLLM(
     "- buyerTrustScore: trust signals from description, FAQs, packages, social proof — punish vague 'I am passionate' copy.",
     "- answerReadinessScore (AEO) 0-100: first-sentence clarity + FAQ coverage of buyer objections (formats, revisions, rights, turnaround).",
     "- geoCiteScore (GEO) 0-100: niche specificity + citable proof a client-facing AI could recommend; low if vague 'I do everything'.",
-    "- answerReadinessNotes: 2-4 specific AEO gaps.",
-    "- suggestedFaqs: 3-5 paste-ready Q&A pairs for THIS gig (not generic).",
-    "- proofQuotes: 1-3 short lines grounded in THIS listing (or honest capability claims) — NEVER invent clients/metrics.",
-    "- visibilityChecklist: 4-7 actions with layer seo|aeo|geo|aio (id, title, detail).",
+    "- answerReadinessNotes: 2-3 short AEO gaps (one sentence each).",
+    "- suggestedFaqs: 3 paste-ready Q&A pairs for THIS gig (answers ≤2 sentences).",
+    "- proofQuotes: 1-2 short lines grounded in THIS listing — NEVER invent clients/metrics.",
+    "- visibilityChecklist: 4-5 actions with layer seo|aeo|geo|aio (id, short title, one-sentence detail).",
     "Critiques must be specific, actionable, and reference real elements of the gig.",
     "Roast comments should be witty and brutally honest but never abusive.",
     "Optimized copy MUST follow the Fiverr winning structure above AND target the language/buyer intent of THIS gig's category (e.g. minimalist/vector/mascot for logo design; Premiere Pro/reels/short-form for video editing; SEO/long-form for content writing; Next.js/Supabase for web dev). Mirror what real buyers in this exact niche search for — never default to dev-stack jargon if the gig is not a dev gig.",
@@ -253,11 +253,9 @@ export async function analyzeGigWithLLM(
     ],
     schema: analysisJsonSchema,
     schemaName: "GigAnalysis",
-    // Full analysis (critique + scores + rewritten title/description/tags/
-    // FAQs/packages) lands around ~2.5-3k output tokens. 6144 gives us
-    // comfortable headroom; if a model still hits the ceiling we retry
-    // once with double the budget (see `callWithTruncationRetry`).
-    maxOutputTokens: 6144,
+    // Full analysis + AEO/GEO fields lands around ~3–5k output tokens.
+    // 8192 first try; truncation helper escalates toward 16k if needed.
+    maxOutputTokens: 8192,
   }
 
   // Call the model with automatic retry on truncation / malformed JSON.

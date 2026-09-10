@@ -16,8 +16,8 @@
  *      with Gemini or when a model emits something weird inside a
  *      string).
  *
- * `callWithTruncationRetry` covers both by retrying once with double
- * the token budget. `safeJsonParse` turns parse failures into a clean,
+ * `callWithTruncationRetry` covers both by escalating the token budget
+ * up to twice. `safeJsonParse` turns parse failures into a clean,
  * user-facing error message instead of a stack trace.
  *
  * Used by `analyze-gig.ts` and `predict-conversion.ts`. The generate
@@ -27,11 +27,21 @@
 
 import { TruncatedResponseError } from "@/lib/llm/providers/types"
 
+/** Hard ceiling — most chat models allow at least this much output. */
+const MAX_OUTPUT_CAP = 16_384
+
+function nextBudget(current: number): number {
+  return Math.min(current * 2, MAX_OUTPUT_CAP)
+}
+
+function isRetryable(err: unknown): boolean {
+  return err instanceof TruncatedResponseError || err instanceof SyntaxError
+}
+
 /**
- * Call the LLM once at `firstBudget`. If the provider throws
- * `TruncatedResponseError` OR the returned payload isn't syntactically
- * valid JSON, retry once with double the budget. Cap doubles only once
- * so a genuinely runaway model can't drain the user's token quota.
+ * Call the LLM at `firstBudget`. On truncation or malformed JSON, retry
+ * with a doubled budget (capped). One more escalation if still truncated.
+ * Caps retries so a runaway model can't drain the user's token quota.
  */
 export async function callWithTruncationRetry(
   callOnce: (maxOutputTokens: number) => Promise<string>,
@@ -39,23 +49,36 @@ export async function callWithTruncationRetry(
   /** Optional label for the console.warn so logs are easy to grep. */
   label = "llm",
 ): Promise<string> {
-  try {
-    const raw = await callOnce(firstBudget)
-    // Cheap pre-validation: if JSON is malformed at this point it's the
-    // same failure mode as an explicit truncation — retry it.
-    JSON.parse(raw)
-    return raw
-  } catch (err) {
-    const truncated = err instanceof TruncatedResponseError
-    const malformed = err instanceof SyntaxError
-    if (!truncated && !malformed) throw err
-    console.warn(
-      `[${label}] first LLM attempt failed (${
-        truncated ? "truncated" : "malformed JSON"
-      }), retrying with ${firstBudget * 2} tokens`,
-    )
-    return callOnce(firstBudget * 2)
+  let budget = Math.min(Math.max(firstBudget, 1024), MAX_OUTPUT_CAP)
+  let lastErr: unknown
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const raw = await callOnce(budget)
+      // Cheap pre-validation: if JSON is malformed at this point it's the
+      // same failure mode as an explicit truncation — retry it.
+      JSON.parse(raw)
+      return raw
+    } catch (err) {
+      lastErr = err
+      if (!isRetryable(err) || attempt === 2) break
+      const bumped = nextBudget(budget)
+      if (bumped <= budget) break
+      console.warn(
+        `[${label}] attempt ${attempt + 1} failed (${
+          err instanceof TruncatedResponseError ? "truncated" : "malformed JSON"
+        }), retrying with ${bumped} tokens`,
+      )
+      budget = bumped
+    }
   }
+
+  if (lastErr instanceof TruncatedResponseError) {
+    throw new Error(
+      "The AI response was cut off before it finished. Please try again — a shorter job post or profile often helps.",
+    )
+  }
+  throw lastErr
 }
 
 /**

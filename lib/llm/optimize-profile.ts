@@ -430,9 +430,10 @@ export async function optimizeSellerProfile(
     "  Skip video-intro steps unless the scrape already leans on video.",
     "suggestedRateNote: one sentence explaining the rate for THIS stage AND niche without inventing credentials.",
     "winAngles: 2-5 why the rewrite helps win clients + Uma matching (niche density, snippet, skills) — not premium pricing for early accounts.",
-    "proofQuotes: 1-3 short citable lines grounded ONLY in scrape facts (or honest capability claims if thin proof). Never invent metrics.",
-    "geoTips: 2-4 GEO/AIO tips (LinkedIn niche post, case-study framing, consistent bio elsewhere).",
-    "visibilityChecklist: 4-7 items with layer seo|aeo|geo|aio.",
+    "proofQuotes: 1-2 short citable lines grounded ONLY in scrape facts (or honest capability claims if thin proof). Never invent metrics.",
+    "geoTips: 2-3 short GEO/AIO tips (one sentence each).",
+    "visibilityChecklist: 4-5 items with layer seo|aeo|geo|aio (short title + one-sentence detail).",
+    "Keep visibility fields SHORT — long JSON causes timeouts. Put depth in the overview, not the extras.",
     "GROUNDING (critical):",
     "- The scraped block is the ONLY source of truth.",
     "- NEVER invent clients, companies, countries, tools, earnings, or ratings.",
@@ -588,7 +589,7 @@ export async function optimizeSellerProfile(
           { role: "user", content: userPrompt },
         ],
       }),
-    8192,
+    12_288,
     "profile-optimize",
   )
 

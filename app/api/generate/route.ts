@@ -442,10 +442,9 @@ export async function POST(req: Request) {
       temperature: 0.55,
       schema: generationJsonSchema,
       schemaName: "GigGeneration",
-      // Full gig generation (description + tags + searchKeywords + FAQs +
-      // 3 packages + requirements + thumbnail ideas) lands around
-      // ~3.5k output tokens. 4096 leaves headroom without unbounded burn.
-      maxOutputTokens: 4096,
+      // Full gig generation + visibility extras. 6144 first; truncation
+      // helper / Fiverr validator escalate if needed.
+      maxOutputTokens: 6144,
       buildMessages: () => [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },

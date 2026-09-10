@@ -215,8 +215,9 @@ export async function writeUpworkProposal(
     "AEO / GEO (visibility):",
     "- aiRecommendScore 0-100: would an AI shortlist name THIS freelancer for THIS job given stated niche/skills/proof? Low if vague generalist.",
     "- aiRecommendNote: 1-2 sentences on what would raise recommendability (niche density, one proof line).",
-    "- screeningAnswers: 2-5 Q&A pairs. Prefer real screening questions from the job post; else common buyer objections for THIS niche. Answers must use only facts from the freelancer profile block.",
+    "- screeningAnswers: 2-3 Q&A pairs. Prefer real screening questions from the job post; else common buyer objections for THIS niche. Answers ≤2 sentences using only freelancer profile facts.",
     "",
+    "Keep ALL fields concise — long answers cause failures. proposal stays 120-200 words.",
     "hook field: the first sentence of the proposal only (must contain a job-specific detail).",
     "proposal field: FULL paste-ready cover letter including the hook (120-200 words).",
     "winAngles: ALWAYS return 2-5 short bullets (client benefits).",
@@ -378,7 +379,7 @@ export async function writeUpworkProposal(
           { role: "user", content: userPrompt },
         ],
       }),
-    2048,
+    4096,
     "upwork-proposal",
   )
 
