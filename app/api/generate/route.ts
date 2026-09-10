@@ -11,7 +11,7 @@ import {
 } from "@/lib/quota"
 import { getAllCachedSnapshots, type NicheSnapshot } from "@/lib/trends"
 import { getNicheDisplayName, renderTrendingTerms } from "@/lib/niches"
-import { FIVERR, softTruncate } from "@/lib/fiverr-limits"
+import { FIVERR, softTruncate, finalizeGigDescription } from "@/lib/fiverr-limits"
 import {
   runWithFiverrValidation,
   type FiverrCheckable,
@@ -206,7 +206,10 @@ function truncateGeneration(gen: GigGeneration): GigGeneration {
   return {
     ...gen,
     title: softTruncate(gen.title, FIVERR.title.max),
-    description: softTruncate(gen.description, FIVERR.description.max),
+    description: finalizeGigDescription(
+      gen.description,
+      FIVERR.description.max,
+    ),
     tags: gen.tags
       .slice(0, FIVERR.tag.count)
       .map((t) => softTruncate(t.toLowerCase(), FIVERR.tag.max)),

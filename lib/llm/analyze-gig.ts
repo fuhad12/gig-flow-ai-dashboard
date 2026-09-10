@@ -15,7 +15,7 @@ import {
 } from "@/lib/llm/conversion-playbook"
 import { getLlmProvider } from "@/lib/llm/provider"
 import { callWithTruncationRetry, safeJsonParse } from "@/lib/llm/truncation"
-import { FIVERR, softTruncate } from "@/lib/fiverr-limits"
+import { FIVERR, softTruncate, finalizeGigDescription } from "@/lib/fiverr-limits"
 import type { GigAnalysis, ScrapedGig } from "@/lib/analysis-types"
 import {
   DEFAULT_GIG_CHECKLIST,
@@ -205,6 +205,7 @@ export async function analyzeGigWithLLM(
     "FIVERR FIELD CONSTRAINTS — you MUST obey every one:",
     `- optimizedTitle: max ${FIVERR.title.max} chars, target ${FIVERR.title.optimalMin}-${FIVERR.title.optimalMax} chars. Prefer action + deliverable + outcome. Never use these characters: & / | # @ % "`,
     `- optimizedDescription: max ${FIVERR.description.max} chars, target ${FIVERR.description.optimalMin}-${FIVERR.description.optimalMax} chars. Plain text only. Follow Hook → Credibility → Deliverables → Process → What I need → CTA.`,
+    "  CRITICAL: Finish the FULL structure inside the char budget. Never end on a bare heading like 'WHAT I NEED FROM YOU:' with no body. If short on space, shorten earlier sections — always close with a one-line CTA.",
     `- optimizedTags: EXACTLY ${FIVERR.tag.count} tags, each max ${FIVERR.tag.max} chars, lowercase letters/numbers/spaces/hyphens only.`,
     "These are hard caps Fiverr will reject if exceeded. Aim for the optimal range, never above the cap.",
     "",
@@ -287,7 +288,7 @@ export async function analyzeGigWithLLM(
     )
   }
   if (typeof rawJson.optimizedDescription === "string") {
-    rawJson.optimizedDescription = softTruncate(
+    rawJson.optimizedDescription = finalizeGigDescription(
       rawJson.optimizedDescription,
       FIVERR.description.max,
     )

@@ -139,30 +139,116 @@ export function classifyLength(range: FieldRange): LengthTone {
 /**
  * Smart-truncate a string to `max` characters. Tries to cut on the last
  * sentence boundary, then the last word boundary, before falling back to a
- * hard slice. Adds an ellipsis if a cut actually happened.
+ * hard slice. Never ends on a bare section heading
+ * (e.g. "WHAT I NEED FROM YOU:"). Adds an ellipsis if a word-cut happened.
  */
 export function softTruncate(input: string, max: number): string {
   if (input.length <= max) return input
   const slice = input.slice(0, max)
-  // Prefer cutting at end of sentence within the slice.
-  const sentenceCut = Math.max(
+
+  const finish = (value: string) => stripTrailingOrphanHeadings(value) || value
+
+  // Prefer cutting at end of sentence within the later half of the slice.
+  const sentenceEnds = [
     slice.lastIndexOf(". "),
     slice.lastIndexOf("! "),
     slice.lastIndexOf("? "),
-    slice.lastIndexOf("\n"),
-  )
+    slice.lastIndexOf(".\n"),
+    slice.lastIndexOf("!\n"),
+    slice.lastIndexOf("?\n"),
+  ]
+  const sentenceCut = Math.max(...sentenceEnds)
   if (sentenceCut > max * 0.5) {
-    return slice.slice(0, sentenceCut + 1).trimEnd()
+    return finish(slice.slice(0, sentenceCut + 1).trimEnd())
   }
+
+  // Prefer a blank-line / paragraph boundary over a mid-section newline.
+  const paraCut = slice.lastIndexOf("\n\n")
+  if (paraCut > max * 0.5) {
+    return finish(slice.slice(0, paraCut).trimEnd())
+  }
+
+  const nlCut = slice.lastIndexOf("\n")
+  if (nlCut > max * 0.5) {
+    return finish(slice.slice(0, nlCut).trimEnd())
+  }
+
   // Fall back to last whitespace.
   const wordCut = slice.lastIndexOf(" ")
   if (wordCut > max * 0.5) {
-    // Leave room for an ellipsis (1 char) if we have it.
     const withEllipsis = slice.slice(0, wordCut).trimEnd()
-    return withEllipsis.length + 1 <= max ? `${withEllipsis}…` : withEllipsis
+    const clipped =
+      withEllipsis.length + 1 <= max ? `${withEllipsis}…` : withEllipsis
+    return finish(clipped)
   }
-  // Hard slice as last resort.
-  return slice.trimEnd()
+
+  return finish(slice.trimEnd()) || slice.slice(0, Math.min(max, 40)).trimEnd()
+}
+
+/** True when text ends on a section header with no body after it. */
+export function endsWithOrphanHeading(text: string): boolean {
+  const trimmed = text.replace(/\s+$/u, "")
+  if (!trimmed) return false
+  const lastLine = trimmed.split(/\n/).pop()?.trim() ?? ""
+  if (!lastLine) return false
+  // "WHAT I NEED FROM YOU:" / "What I need from you:" / "CTA:"
+  if (/[:：]\s*$/u.test(lastLine) && lastLine.length <= 80) return true
+  // ALL-CAPS heading without trailing content (common LLM pattern)
+  if (
+    lastLine.length <= 60 &&
+    /^[A-Z0-9][A-Z0-9 &/'-]{2,}$/u.test(lastLine) &&
+    !/[.!?]$/u.test(lastLine)
+  ) {
+    return true
+  }
+  return false
+}
+
+function stripTrailingOrphanHeadings(text: string): string {
+  let out = text.trimEnd()
+  for (let i = 0; i < 5 && endsWithOrphanHeading(out); i++) {
+    const lines = out.split(/\n/)
+    while (lines.length > 0 && !lines[lines.length - 1].trim()) lines.pop()
+    if (lines.length === 0) return ""
+    lines.pop()
+    out = lines.join("\n").trimEnd()
+  }
+  return out
+}
+
+const DEFAULT_DESC_CTA =
+  "Ready when you are — send your brief (or error details) and I'll confirm the plan before starting."
+
+/**
+ * Cap a Fiverr gig description AND repair incomplete endings the model
+ * (or softTruncate) leaves behind — orphan headings, missing CTA.
+ */
+export function finalizeGigDescription(
+  input: string,
+  max: number = FIVERR.description.max,
+): string {
+  let text = softTruncate(input.trim(), max)
+  // softTruncate only runs when over max — also repair in-budget cutoffs.
+  text = stripTrailingOrphanHeadings(text)
+
+  const hasCta =
+    /\b(order now|get started|ready when|message me|send (me |your )?(brief|details|project)|let'?s (get|start)|click (the )?order)\b/i.test(
+      text,
+    ) || /\nCTA\b/i.test(text)
+
+  if (!hasCta || endsWithOrphanHeading(text)) {
+    const cta = DEFAULT_DESC_CTA
+    const sep = text.length === 0 ? "" : text.endsWith("\n") ? "" : "\n\n"
+    const combined = `${text}${sep}${cta}`
+    text = softTruncate(combined, max)
+    text = stripTrailingOrphanHeadings(text)
+    if (endsWithOrphanHeading(text) || text.length < 20) {
+      text = softTruncate(`${text}\n\nOrder now to start.`, max)
+      text = stripTrailingOrphanHeadings(text)
+    }
+  }
+
+  return text.trimEnd()
 }
 
 // ---------- Field-level validators ----------

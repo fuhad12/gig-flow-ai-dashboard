@@ -10,6 +10,8 @@ import {
   checkTitle,
   classifyLength,
   countKeywordOccurrences,
+  endsWithOrphanHeading,
+  finalizeGigDescription,
   formatViolationsForRetry,
   keywordCorpus,
   softTruncate,
@@ -93,6 +95,37 @@ describe("softTruncate", () => {
     // Sentence cut would have produced just "a." which is < max*0.5,
     // so we fall through to the hard slice path (no spaces beyond index 1).
     expect(out.startsWith("a. ")).toBe(true)
+  })
+
+  it("avoids cutting right after a bare section heading", () => {
+    const body =
+      "Hook line with a buyer outcome. Credibility next. Deliverables listed carefully here. "
+    const heading = "WHAT I NEED FROM YOU:\n"
+    const rest = "x".repeat(200)
+    const input = body + heading + rest
+    // Window that includes the heading newline but not enough for body.
+    const max = body.length + heading.length + 5
+    const out = softTruncate(input, max)
+    expect(out.length).toBeLessThanOrEqual(max)
+    expect(endsWithOrphanHeading(out)).toBe(false)
+  })
+})
+
+describe("finalizeGigDescription", () => {
+  it("strips orphan headings and appends a CTA", () => {
+    const input =
+      "I will fix your Base44 bugs fast.\n\nWHAT I NEED FROM YOU:"
+    const out = finalizeGigDescription(input, 1200)
+    expect(endsWithOrphanHeading(out)).toBe(false)
+    expect(out.toLowerCase()).not.toMatch(/what i need from you:\s*$/i)
+    expect(out.length).toBeGreaterThan(40)
+    expect(out.length).toBeLessThanOrEqual(1200)
+  })
+
+  it("keeps a complete description under the cap", () => {
+    const input =
+      "I will debug your Base44 app.\n\nYou get a clear fix plan.\n\nOrder now to start."
+    expect(finalizeGigDescription(input, 1200)).toBe(input)
   })
 })
 
