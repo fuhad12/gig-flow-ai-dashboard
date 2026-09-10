@@ -108,10 +108,14 @@ export function LandingView({
 
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as
-          | { error?: string }
+          | { error?: string; stage?: string }
           | null
+        const detail = data?.error?.trim()
         throw new Error(
-          data?.error ?? `Request failed with status ${res.status}`,
+          detail ||
+            (res.status === 502
+              ? "Couldn't reach this gig (502). If you used a fiverr.com/s/… share link, open it in your browser and paste the full https://www.fiverr.com/<seller>/<gig-name> URL instead."
+              : `Request failed with status ${res.status}`),
         )
       }
 

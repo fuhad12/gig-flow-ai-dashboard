@@ -47,13 +47,58 @@ export async function scrapeFiverrGig(url: string): Promise<ScrapedGig> {
  * Example: `https://www.fiverr.com/s/1q8Pdbp` or `https://fiverr.com/share/xyz123`
  *
  * These shortened links typically only render in Fiverr's mobile app
- * or via authenticated browser session, and they return 404 to most
- * server-side scrapers (including Firecrawl's stealth proxy). The
- * canonical gig URL after redirect looks like
- * `https://www.fiverr.com/<seller>/<gig-slug>`.
+ * or via authenticated browser session. Server-side fetches often get
+ * a 302 to `/` (homepage) — NOT the canonical gig URL — so we must
+ * never treat "redirected away from /s/" as success unless the final
+ * URL is a real seller/gig path.
  */
 const FIVERR_SHORT_URL_RE =
   /^https?:\/\/(?:www\.)?fiverr\.com\/(?:s|share)\/[a-zA-Z0-9_-]+\/?$/i
+
+/** Paths that are never a seller username on a gig detail page. */
+const FIVERR_RESERVED_SEGMENTS = new Set([
+  "s",
+  "share",
+  "categories",
+  "search",
+  "gigs",
+  "login",
+  "join",
+  "start_selling",
+  "inspire",
+  "business",
+  "pro",
+  "logo-maker",
+  "messages",
+  "inbox",
+  "users",
+  "interest-page",
+])
+
+const SHORT_LINK_HELP =
+  "This looks like a Fiverr mobile share link (fiverr.com/s/...). " +
+  "Open it in your browser, then copy the full URL from the address bar — " +
+  "it should look like https://www.fiverr.com/<seller>/<gig-name>. Paste that instead."
+
+/**
+ * True when the URL is a canonical gig detail page:
+ * `https://www.fiverr.com/<seller>/<gig-slug>`.
+ */
+export function isFiverrGigDetailUrl(input: string): boolean {
+  try {
+    const u = new URL(input.trim())
+    if (!/(^|\.)fiverr\.com$/i.test(u.hostname)) return false
+    const parts = u.pathname.split("/").filter(Boolean)
+    if (parts.length < 2) return false
+    const [seller, slug] = parts
+    if (!seller || !slug) return false
+    if (FIVERR_RESERVED_SEGMENTS.has(seller.toLowerCase())) return false
+    if (FIVERR_SHORT_URL_RE.test(u.origin + u.pathname)) return false
+    return true
+  } catch {
+    return false
+  }
+}
 
 /**
  * Browser-shaped headers so the redirect host doesn't immediately
@@ -69,37 +114,52 @@ const BROWSER_HEADERS: Record<string, string> = {
   "Accept-Language": "en-US,en;q=0.9",
 }
 
+function absoluteFiverrUrl(location: string, base: string): string {
+  try {
+    return new URL(location, base).href
+  } catch {
+    return location
+  }
+}
+
 async function resolveFiverrShortUrl(input: string): Promise<string> {
   const url = input.trim()
-  if (!FIVERR_SHORT_URL_RE.test(url)) return url
+  if (!FIVERR_SHORT_URL_RE.test(url)) {
+    // Already a full URL — still guard against homepage / junk.
+    if (isFiverrGigDetailUrl(url)) return url
+    if (/fiverr\.com/i.test(url) && !isFiverrGigDetailUrl(url)) {
+      throw new Error(
+        "That Fiverr link doesn't look like a gig page. Paste a URL like " +
+          "https://www.fiverr.com/<seller>/<gig-name> (open the gig, then copy from the address bar).",
+      )
+    }
+    return url
+  }
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 10_000)
 
   try {
+    // Prefer manual redirect so we can inspect Location. Fiverr share
+    // links currently 302 to `/` for servers — that must NOT count as
+    // a resolved gig URL (old bug: follow redirects → scrape homepage → 502).
     const res = await fetch(url, {
       method: "GET",
-      redirect: "follow",
+      redirect: "manual",
       headers: BROWSER_HEADERS,
       signal: controller.signal,
     })
 
-    // `res.url` is the final URL after all redirects. If we ended up
-    // somewhere that's no longer a `/s/` or `/share/` path, that's
-    // our canonical gig URL.
-    const finalUrl = res.url || url
-    if (!FIVERR_SHORT_URL_RE.test(finalUrl)) return finalUrl
+    const location = res.headers.get("location")
+    if (location) {
+      const next = absoluteFiverrUrl(location, url)
+      if (isFiverrGigDetailUrl(next)) return next
+    }
 
-    // Still on a short URL — the redirect didn't fire, which on Fiverr
-    // usually means the share link expired or requires a mobile-app
-    // session. Surface a friendly error rather than passing the dead
-    // link to Firecrawl.
-    throw new Error(
-      "This looks like a Fiverr mobile share link (fiverr.com/s/...). " +
-        "Open the link in your browser, then copy the full URL from the " +
-        "address bar — it should look like " +
-        "https://www.fiverr.com/<seller>/<gig-name>. Paste that instead.",
-    )
+    // Some environments still follow once; check final URL if present.
+    if (res.url && isFiverrGigDetailUrl(res.url)) return res.url
+
+    throw new Error(SHORT_LINK_HELP)
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error(
@@ -107,18 +167,15 @@ async function resolveFiverrShortUrl(input: string): Promise<string> {
           "browser and paste the full canonical URL instead.",
       )
     }
-    // If our friendly Error above is the cause, rethrow it as-is.
-    if (
-      err instanceof Error &&
-      err.message.startsWith("This looks like a Fiverr mobile share link")
-    ) {
+    if (err instanceof Error && err.message.includes("fiverr.com/s/")) {
       throw err
     }
-    // Anything else (DNS failure, network glitch on our box) — fall
-    // back to passing the raw URL to Firecrawl. Firecrawl's own
-    // network is more reliable than the dev machine; sometimes it
-    // CAN resolve the share link when our server can't.
-    return url
+    if (err instanceof Error && err.message.includes("doesn't look like a gig")) {
+      throw err
+    }
+    // Network glitch — still refuse to scrape the raw short URL; scrapers
+    // almost never get usable gig JSON from /s/ links.
+    throw new Error(SHORT_LINK_HELP)
   } finally {
     clearTimeout(timeout)
   }
