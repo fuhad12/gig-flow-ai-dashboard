@@ -9,12 +9,16 @@ export type { ScrapedSearchGig }
 /**
  * Scrape a Fiverr gig page into a normalized {@link ScrapedGig}.
  *
- * Strategy (first match wins):
- *   1. Resolve Fiverr short share links (`fiverr.com/s/...`) to the
- *      canonical gig URL when possible.
- *   2. If `APIFY_API_TOKEN` is set → Apify Fiverr Actor (preferred free path).
- *   3. Else if `FIRECRAWL_API_KEY` is set → Firecrawl stealth scrape.
+ * Strategy:
+ *   1. Resolve Fiverr short share links (`fiverr.com/s/...`) to a real
+ *      seller/gig URL — refuse homepage redirects.
+ *   2. Prefer Apify when `APIFY_API_TOKEN` is set (fast/cheap path).
+ *   3. On Apify failure/timeout → Firecrawl if configured (don't 502
+ *      when the Actor is flaky).
  *   4. Else → deterministic mock so local UI still works.
+ *
+ * Apify sync runs are capped well under the Vercel function budget so a
+ * hung Actor can't eat the whole `maxDuration` and leave a bare HTML 502.
  */
 export async function scrapeFiverrGig(url: string): Promise<ScrapedGig> {
   const resolvedUrl = await resolveFiverrShortUrl(url)
@@ -22,12 +26,34 @@ export async function scrapeFiverrGig(url: string): Promise<ScrapedGig> {
   const { getApifyToken, apifyScrapeFiverrGig } = await import(
     "@/lib/apify-fiverr"
   )
+  const firecrawlKey = process.env.FIRECRAWL_API_KEY?.trim() || null
 
   if (getApifyToken()) {
-    return apifyScrapeFiverrGig(resolvedUrl)
+    try {
+      return await apifyScrapeFiverrGig(resolvedUrl)
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err)
+      console.warn(`[scraper] Apify failed, trying Firecrawl: ${reason}`)
+      if (firecrawlKey) {
+        try {
+          // Shorter budget when Apify already burned ~45s — leave room for LLM.
+          return await firecrawlScrape(resolvedUrl, firecrawlKey, {
+            timeoutMs: 40_000,
+          })
+        } catch (fcErr) {
+          const fcReason =
+            fcErr instanceof Error ? fcErr.message : String(fcErr)
+          throw new Error(
+            `Couldn't scrape this gig. Apify: ${reason}. Firecrawl: ${fcReason}`,
+          )
+        }
+      }
+      throw err instanceof Error
+        ? err
+        : new Error(`Couldn't scrape this gig: ${reason}`)
+    }
   }
 
-  const firecrawlKey = process.env.FIRECRAWL_API_KEY
   if (firecrawlKey) {
     return firecrawlScrape(resolvedUrl, firecrawlKey)
   }
@@ -265,9 +291,11 @@ interface FirecrawlResponse {
 async function firecrawlScrape(
   url: string,
   apiKey: string,
+  opts?: { timeoutMs?: number },
 ): Promise<ScrapedGig> {
+  const timeoutMs = opts?.timeoutMs ?? 55_000
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 60_000)
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
   let res: Response
   try {
@@ -284,7 +312,7 @@ async function firecrawlScrape(
         // Fiverr is heavily JS-rendered and bot-protected.
         proxy: "stealth",
         waitFor: 3000,
-        timeout: 45_000,
+        timeout: Math.min(45_000, Math.max(20_000, timeoutMs - 10_000)),
         jsonOptions: {
           schema: firecrawlExtractionSchema,
           prompt:
@@ -299,7 +327,9 @@ async function firecrawlScrape(
   } catch (err) {
     clearTimeout(timeout)
     if ((err as Error).name === "AbortError") {
-      throw new Error("Firecrawl request timed out after 60 seconds")
+      throw new Error(
+        `Firecrawl request timed out after ${Math.round(timeoutMs / 1000)} seconds`,
+      )
     }
     throw new Error(
       `Firecrawl request failed: ${err instanceof Error ? err.message : String(err)}`,

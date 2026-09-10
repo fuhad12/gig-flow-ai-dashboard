@@ -111,12 +111,13 @@ export function LandingView({
           | { error?: string; stage?: string }
           | null
         const detail = data?.error?.trim()
-        throw new Error(
-          detail ||
-            (res.status === 502
-              ? "Couldn't reach this gig (502). If you used a fiverr.com/s/… share link, open it in your browser and paste the full https://www.fiverr.com/<seller>/<gig-name> URL instead."
-              : `Request failed with status ${res.status}`),
-        )
+        if (detail) throw new Error(detail)
+        if (res.status === 502 || res.status === 504) {
+          throw new Error(
+            "Analysis timed out or the scrape failed (502). Use the full gig URL from your browser address bar (https://www.fiverr.com/<seller>/<gig-name>), not a fiverr.com/s/… share link — then try again.",
+          )
+        }
+        throw new Error(`Request failed with status ${res.status}`)
       }
 
       const data = (await res.json()) as AnalyzeResponse

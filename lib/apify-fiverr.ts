@@ -34,11 +34,14 @@ function fiverrActorId(): string {
 /**
  * Run an Actor synchronously and return its dataset items.
  * Docs: POST /v2/acts/:actorId/run-sync-get-dataset-items
+ *
+ * Default timeout is intentionally below Vercel Hobby/Pro function limits
+ * so we can fall back to Firecrawl (or return JSON) instead of a bare 502.
  */
 async function runActorSync<T = Record<string, unknown>>(
   actorId: string,
   input: Record<string, unknown>,
-  timeoutSec = 85,
+  timeoutSec = 45,
 ): Promise<T[]> {
   const token = getApifyToken()
   if (!token) {
@@ -50,7 +53,9 @@ async function runActorSync<T = Record<string, unknown>>(
     `/run-sync-get-dataset-items?timeout=${timeoutSec}&memory=1024`
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), (timeoutSec + 15) * 1000)
+  // Abort a few seconds after Apify's own timeout so we fail in-process
+  // before the platform gateway kills the function with an empty 502.
+  const timer = setTimeout(() => controller.abort(), (timeoutSec + 8) * 1000)
 
   let res: Response
   try {

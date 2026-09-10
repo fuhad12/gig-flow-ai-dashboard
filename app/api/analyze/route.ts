@@ -26,7 +26,10 @@ const ANALYZE_RATE_LIMIT = parseInt(
 const ANALYZE_RATE_WINDOW_MS = 60 * 60 * 1000 // 1 hour
 
 export const runtime = "nodejs"
-export const maxDuration = 90
+// Scrape (Apify ≤45s or Firecrawl ≤60s) + LLM needs headroom. 120s requires
+// a Vercel plan that allows it; Hobby still caps lower and we fail earlier
+// via Apify/Firecrawl timeouts so the client gets JSON instead of HTML 502.
+export const maxDuration = 120
 
 // ---------- Request validation ----------
 
@@ -151,6 +154,7 @@ export async function POST(req: Request) {
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to scrape the gig page"
+    console.error("[analyze] scrape failed:", message)
     return NextResponse.json(
       { error: message, stage: "scrape" },
       { status: 502 },
